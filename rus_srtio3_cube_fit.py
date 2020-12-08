@@ -8,8 +8,7 @@ from lmfit import minimize, Parameters, report_fit
 filename = 'rus_srtio3_cube.mph'
 model = client.load(filename)
 
-nb_freq_in_comsol  = 20
-nb_freq_to_compare = 12 # this one needs to be smaller
+nb_freq  = 20
 
 ## Initial parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 c11_ini = 321.49167  # in GPa
@@ -30,7 +29,7 @@ c44_vary = True
 freqs_data = 1e-6 * np.loadtxt("data/SrTiO3_RT_frequencies.dat", dtype="float", comments="#")
 
 ## Only select the first number of "freq to compare"
-freqs_data = freqs_data[:nb_freq_to_compare]
+freqs_data = freqs_data[:nb_freq]
 
 ## Initialize fit parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 pars = Parameters()
@@ -39,7 +38,7 @@ pars.add("c23", value=c23_ini, vary=c23_vary, min=c23_int[0], max=c23_int[-1])
 pars.add("c44", value=c44_ini, vary=c44_vary, min=c44_int[0], max=c44_int[-1])
 
 ## Modifying COMSOL parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-model.parameter('nb_freq', str(nb_freq_in_comsol))
+model.parameter('nb_freq', str(nb_freq + 6))
 
 ## Residual function >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 def residual_func(pars):
@@ -69,12 +68,13 @@ def residual_func(pars):
 
     print("---- Done in %.6s seconds ----" % (time.time() - start_total_time))
 
-    ## Remove bad frequencies at the beginning
-    index_ok = freqs_sim > 1e-4
-    freqs_sim = freqs_sim[index_ok]
+    ## Remove the first 6 bad frequencies
+    freqs_sim = freqs_sim[6:]
 
     ## Only select the first number of "freq to compare"
-    freqs_sim = freqs_sim[:nb_freq_to_compare]
+    freqs_sim = freqs_sim[:nb_freq]
+    print(freqs_data)
+    print(freqs_sim)
 
     return freqs_sim - freqs_data
 
