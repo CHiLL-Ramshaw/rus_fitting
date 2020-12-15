@@ -1,15 +1,8 @@
 # Files #############
 rus_comsol/__pycache__/
 rus_comsol/__pycache__/*
-rus_comsol/tempCodeRunnerFile.py
 
-examples/.ipynb_checkpoints/*
-examples/data/*
-examples/sim/*
-examples/mph/*
-!examples/mph/rus_srtio3_cube.mph
-examples/tempCodeRunnerFile.py
-
+examples/*
 .vscode/
 
 

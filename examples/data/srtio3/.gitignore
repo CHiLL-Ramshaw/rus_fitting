@@ -2,5 +2,6 @@
 *
 # Except this file
 !.gitignore
-!srtio3
+!SrTiO3_RT_frequencies.dat
+
 
