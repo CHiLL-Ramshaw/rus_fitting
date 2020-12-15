@@ -5,7 +5,7 @@ client = mph.Client()
 from lmfit import minimize, Parameters, report_fit
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-filename = 'rus_srtio3_cube.mph'
+filename = 'mph/rus_srtio3_cube.mph'
 model = client.load(filename)
 
 nb_freq  = 20
@@ -26,7 +26,7 @@ c44_vary = True
 # nb_calls = 0
 
 ## Load the resonance data in MHz >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-freqs_data = 1e-6 * np.loadtxt("data/SrTiO3_RT_frequencies.dat", dtype="float", comments="#")
+freqs_data = 1e-6 * np.loadtxt("data/srtio3/SrTiO3_RT_frequencies.dat", dtype="float", comments="#")
 
 ## Only select the first number of "freq to compare"
 freqs_data = freqs_data[:nb_freq]
@@ -73,8 +73,6 @@ def residual_func(pars):
 
     ## Only select the first number of "freq to compare"
     freqs_sim = freqs_sim[:nb_freq]
-    print(freqs_data)
-    print(freqs_sim)
 
     return freqs_sim - freqs_data
 
