@@ -1,4 +1,4 @@
-from rus_comsol.fitting_rus import FittingRUS
+from rus_comsol.fitting_rus_lmfit import FittingRUS
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 ## Initial values
