@@ -136,12 +136,12 @@ if __name__ == '__main__':
                    }
     ranges_dict  = {"c11": [300, 350],
                     "c23": [70, 130],
-                    # "c44": [100, 150]
+                    "c44": [100, 150]
                     }
 
     fitObject = FittingRUS(init_member=init_member, ranges_dict=ranges_dict,
                            freqs_file = "../examples/data/srtio3/SrTiO3_RT_frequencies.dat",
-                           mph_file="../examples/mph/rus_srtio3_cube.mph",
+                           mph_file="../examples/srtio3/mph/rus_srtio3_cube.mph",
                            nb_freq = 42)
     fitObject.run_fit()
 
