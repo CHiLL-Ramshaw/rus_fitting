@@ -3,4 +3,5 @@
 # Except this file
 !.gitignore
 !rus_srtio3_cube.mph
+!rus_srtio3_cube_parametric_sweep.mph
 
