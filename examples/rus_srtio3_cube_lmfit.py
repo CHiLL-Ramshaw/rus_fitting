@@ -15,5 +15,5 @@ ranges_dict  = {"c11": [300, 350],
 fitObject = FittingRUS(init_member=init_member, ranges_dict=ranges_dict,
                         freqs_file = "data/srtio3/SrTiO3_RT_frequencies.dat",
                         mph_file="mph/srtio3/rus_srtio3_cube.mph",
-                        nb_freq = 42)
+                        nb_freq_data = 6, nb_freq_sim = 8)
 fitObject.run_fit()
