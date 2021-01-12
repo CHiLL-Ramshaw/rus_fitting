@@ -1,8 +1,6 @@
 import numpy as np
 from scipy.spatial import distance_matrix
 from scipy.optimize import differential_evolution, linear_sum_assignment
-from multiprocessing import cpu_count#, Pool
-from pathos.multiprocessing import ProcessingPool as Pool
 import mph
 import time
 from copy import deepcopy
@@ -17,7 +15,7 @@ class FittingRUS:
                  nb_freq_data, nb_freq_sim,
                  missing=True,
                  study_name="resonances",
-                 method="differential_evolution", parallel=False,
+                 method="differential_evolution",
                  population=100, N_generation=20, mutation_s=0.1, crossing_p=0.9,
                  **trash):
         ## Initialize
@@ -37,20 +35,10 @@ class FittingRUS:
         self.study_name   = study_name
         self.method       = method # "shgo", "differential_evolution", "leastsq"
         self.pars         = Parameters()
-        self.pars_name    = sorted(self.ranges_dict.keys())
-
-        ## for lmfit
         for param_name, param_range in self.ranges_dict.items():
             self.pars.add(param_name, value = self.init_member[param_name], min = param_range[0], max = param_range[-1])
 
-        ## for scipy
-        self.pars_bounds  = []
-        for param_name in self.pars_name:
-            self.pars_bounds.append((ranges_dict[param_name][0], ranges_dict[param_name][-1]))
-        self.pars_bounds = tuple(self.pars_bounds)
-
         ## Differential evolution
-        self.parallel   = parallel
         self.population   = population
         self.N_generation = N_generation
         self.mutation_s   = mutation_s
@@ -60,8 +48,6 @@ class FittingRUS:
         self.nb_calls   = 0
         self.json_name  = None
         self.freqs_data = None # in MHz
-        # self.client     = None
-        # self.model      = None
 
         ## Load data
         self.load_data()
@@ -88,16 +74,22 @@ class FittingRUS:
         return index_sim, freqs_sim[index_sim]
 
 
-    def objective_func(self):
+    def compute_diff(self, pars):
         """
         Compute diff = freqs_sim - freqs_data
         """
+        self.pars = pars
 
         start_total_time = time.time()
 
+        ## Update member with fit parameters
+        for param_name in self.ranges_dict.keys():
+            self.member[param_name] = self.pars[param_name].value
+            print(param_name + " : " + "{0:g}".format(self.pars[param_name].value) + " GPa")
+
         ## Update elastic constants --------------------------------------------------
-        for param_name in self.pars_name:
-            self.model.parameter(param_name, str(self.member[param_name])+"[GPa]")
+        for param_name in self.ranges_dict.keys():
+            self.model.parameter(param_name, str(self.pars[param_name].value)+"[GPa]")
 
         ## Compute resonances --------------------------------------------------------
         self.model.solve(self.study_name)
@@ -133,26 +125,8 @@ class FittingRUS:
         self.nb_calls += 1
         print("---- call #" + str(self.nb_calls) + " in %.6s seconds ----" % (time.time() - start_total_time))
 
-        return freqs_sim
 
-
-    def comput_diff(self, pars):
-        ## Update member with fit parameters
-        self.pars = pars
-        for param_name in self.pars_name:
-            self.member[param_name] = self.pars[param_name].value
-            print(param_name + " : " + "{0:g}".format(self.member[param_name]) + " GPa")
-        freqs_sim = self.objective_func()
         return freqs_sim - self.freqs_data
-
-
-    def comput_chi2(self, pars_array):
-        ## Update member with fit parameters
-        for i, param_name in enumerate(self.pars_name):
-            self.member[param_name] = pars_array[i]
-            print(param_name + " : " + "{0:g}".format(self.member[param_name]) + " GPa")
-        freqs_sim = self.objective_func()
-        return np.sum((freqs_sim - self.freqs_data)**2)
 
 
     def initiate_fit(self):
@@ -163,44 +137,27 @@ class FittingRUS:
             self.model.parameter(param_name, str(param_value)+"[GPa]")
         ## Modifying COMSOL parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         self.model.parameter('nb_freq', str(self.nb_freq_sim + 6))
-        print("Worker OK")
 
 
     def run_fit(self):
 
         ## Initialize client
-        if self.parallel == True:
-            # self.initiate_fit()
-            percent_workers = 100
-            num_cpu = cpu_count()
-            num_workers = 2 # int(percent_workers / 100 * num_cpu)
-            pool = Pool(processes=num_workers, initializer=self.initiate_fit)
-            workers = pool.map
-            print("--- Pool initialized with ", num_workers, " workers ---")
-        else:
-            self.initiate_fit()
-            workers = 1
+        self.initiate_fit()
 
         ## Initialize number of calls
         self.nb_calls = 0
 
         ## Run fit algorithm
-        if self.method=="differential_evolution_scipy" and self.parallel==True:
-            out = differential_evolution(self.comput_chi2, bounds=self.pars_bounds,
-                                         workers=workers, updating='deferred')
-        if self.method=="differential_evolution_scipy" and self.parallel==False:
-            out = differential_evolution(self.comput_chi2, bounds=self.pars_bounds,
-                                         workers=workers)
-        if self.method=="differential_evolution":
-            out = minimize(self.comput_diff, self.pars,
-                           method='differential_evolution')
         if self.method=="least_square":
-            out = minimize(self.comput_diff, self.pars)
+            out = minimize(self.compute_diff, self.pars)
         if self.method=="shgo":
-            out = minimize(self.comput_diff, self.pars,
+            out = minimize(self.compute_diff, self.pars,
                            method='shgo') # , sampling_method='sobol', options={"f_tol": 1e-16}, n = 100, iters=20)
+        if self.method=="differential_evolution":
+            out = minimize(self.compute_diff, self.pars,
+                           method='differential_evolution')
         if self.method=="ampgo":
-            out = minimize(self.comput_diff, self.pars,
+            out = minimize(self.compute_diff, self.pars,
                            method='ampgo')
         else:
             print("This method does not exist in the class")
@@ -214,7 +171,6 @@ class FittingRUS:
 
         ## Close COMSOL file without saving solutions in the file
         self.client.clear()
-        pool.terminate()
 
 
 
