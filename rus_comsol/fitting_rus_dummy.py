@@ -1,8 +1,9 @@
 import numpy as np
 from scipy.spatial import distance_matrix
 from scipy.optimize import differential_evolution, linear_sum_assignment
-from multiprocessing import cpu_count#, Pool
-from pathos.multiprocessing import ProcessingPool as Pool
+from multiprocessing import cpu_count
+from multiprocessing import Pool
+# from pathos.multiprocessing import ProcessingPool as Pool
 import mph
 import time
 from copy import deepcopy
@@ -51,6 +52,7 @@ class FittingRUS:
 
         ## Differential evolution
         self.parallel   = parallel
+        self.percent_workers = 100 # percentage of workers in regard to available cores
         self.population   = population
         self.N_generation = N_generation
         self.mutation_s   = mutation_s
@@ -89,23 +91,19 @@ class FittingRUS:
 
 
     def objective_func(self):
-        """
-        Compute diff = freqs_sim - freqs_data
-        """
-
         start_total_time = time.time()
 
         ## Update elastic constants --------------------------------------------------
         for param_name in self.pars_name:
-            self.model.parameter(param_name, str(self.member[param_name])+"[GPa]")
+            model.parameter(param_name, str(self.member[param_name])+"[GPa]")
 
         ## Compute resonances --------------------------------------------------------
-        self.model.solve(self.study_name)
-        freqs_sim_calc = self.model.evaluate('abs(freq)', 'MHz')
+        model.solve(self.study_name)
+        freqs_sim_calc = model.evaluate('abs(freq)', 'MHz')
         ## Remove the useless small frequencies
         freqs_sim_calc = freqs_sim_calc[freqs_sim_calc > 1e-4]
-        self.model.clear()
-        self.model.reset()
+        model.clear()
+        model.reset()
 
         if self.missing == True:
             ## Linear assignement of the simulated frequencies to the data
@@ -132,6 +130,7 @@ class FittingRUS:
 
         self.nb_calls += 1
         print("---- call #" + str(self.nb_calls) + " in %.6s seconds ----" % (time.time() - start_total_time))
+        sys.stdout.flush()
 
         return freqs_sim
 
@@ -148,32 +147,40 @@ class FittingRUS:
 
     def comput_chi2(self, pars_array):
         ## Update member with fit parameters
-        for i, param_name in enumerate(self.pars_name):
-            self.member[param_name] = pars_array[i]
-            print(param_name + " : " + "{0:g}".format(self.member[param_name]) + " GPa")
-        freqs_sim = self.objective_func()
-        return np.sum((freqs_sim - self.freqs_data)**2)
+        # for i, param_name in enumerate(self.pars_name):
+        #     self.member[param_name] = pars_array[i]
+        #     print(param_name + " : " + "{0:g}".format(self.member[param_name]) + " GPa")
+        # freqs_sim = self.objective_func()
+        # return np.sum((freqs_sim - self.freqs_data)**2)
+        a = [340, 82, 149]
+        return np.sum((pars_array - a)**2)
 
+    def __call__(self, pars_array):
+        return self.comput_chi2(pars_array)
 
     def initiate_fit(self):
-        ## Initialize the COMSOL file
-        self.client = mph.Client()
-        self.model = self.client.load(self.mph_file)
-        for param_name, param_value in self.init_member.items():
-            self.model.parameter(param_name, str(param_value)+"[GPa]")
-        ## Modifying COMSOL parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        self.model.parameter('nb_freq', str(self.nb_freq_sim + 6))
-        print("Worker OK")
+        # ## Initialize the COMSOL file
+        # global client
+        # global model
+        # client = mph.Client()
+        # model = client.load(self.mph_file)
+        # for param_name, param_value in self.init_member.items():
+        #     model.parameter(param_name, str(param_value)+"[GPa]")
+        # ## Modifying COMSOL parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        # model.parameter('nb_freq', str(self.nb_freq_sim + 6))
+
+        # if self.parallel == True:
+        #     print(">>>>  Worker Init <<<<")
+        #     sys.stdout.flush()
+        l = 1
 
 
     def run_fit(self):
 
         ## Initialize client
         if self.parallel == True:
-            # self.initiate_fit()
-            percent_workers = 100
             num_cpu = cpu_count()
-            num_workers = 2 # int(percent_workers / 100 * num_cpu)
+            num_workers = int(self.percent_workers / 100 * num_cpu)
             pool = Pool(processes=num_workers, initializer=self.initiate_fit)
             workers = pool.map
             print("--- Pool initialized with ", num_workers, " workers ---")
@@ -206,32 +213,20 @@ class FittingRUS:
             print("This method does not exist in the class")
 
         ## Display fit report
-        report_fit(out)
 
-        ## Export final parameters from the fit
-        for param_name in self.ranges_dict.keys():
-            self.member[param_name] = out.params[param_name].value
+        if self.method!="differential_evolution_scipy":
+            report_fit(out)
 
-        ## Close COMSOL file without saving solutions in the file
-        self.client.clear()
-        pool.terminate()
+            ## Export final parameters from the fit
+            for param_name in self.ranges_dict.keys():
+                self.member[param_name] = out.params[param_name].value
 
+            ## Close COMSOL file without saving solutions in the file
+            client.clear()
+        else:
+            print(out.x)
 
+        if self.parallel == True:
+            pool.terminate()
 
-
-if __name__ == '__main__':
-    init_member = {"c11": 321.49167,
-                   "c23": 103.52989,
-                   "c44": 124.91915,
-                   }
-    ranges_dict  = {"c11": [300, 350],
-                    "c23": [70, 130],
-                    "c44": [100, 150]
-                    }
-
-    fitObject = FittingRUS(init_member=init_member, ranges_dict=ranges_dict,
-                           freqs_file = "../examples/data/srtio3/SrTiO3_RT_frequencies.dat",
-                           mph_file="../examples/srtio3/mph/rus_srtio3_cube.mph",
-                           nb_freq_data = 10, nb_freq_sim = 12)
-    fitObject.run_fit()
 
