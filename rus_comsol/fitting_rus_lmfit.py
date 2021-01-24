@@ -6,6 +6,7 @@ from multiprocessing import cpu_count, Pool
 import mph
 import time
 from copy import deepcopy
+from lmfit import minimize, Parameters, report_fit
 import sys
 
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -17,8 +18,7 @@ class FittingRUS:
                  missing=True,
                  study_name="resonances",
                  method="differential_evolution", parallel=False, nb_workers=1,
-                 population=15, N_generation=10000, mutation=0.1, crossing=0.9,
-                 polish=False, updating='deferred',
+                 population=15, N_generation=1000, mutation_s=0.1, crossing_p=0.9,
                  **trash):
         ## Initialize
         self.init_member  = deepcopy(init_member)
@@ -35,8 +35,13 @@ class FittingRUS:
         self.mph_file     = mph_file
         self.missing      = missing
         self.study_name   = study_name
-        # self.method       = method # "shgo", "differential_evolution", "leastsq"
+        self.method       = method # "shgo", "differential_evolution", "leastsq"
+        self.pars         = Parameters()
         self.pars_name    = sorted(self.ranges_dict.keys())
+
+        ## for lmfit
+        for param_name, param_range in self.ranges_dict.items():
+            self.pars.add(param_name, value = self.init_member[param_name], min = param_range[0], max = param_range[-1])
 
         ## for scipy
         self.pars_bounds  = []
@@ -47,12 +52,10 @@ class FittingRUS:
         ## Differential evolution
         self.parallel     = parallel
         self.nb_workers   = nb_workers
-        self.population   = population # (popsize = population * len(x))
+        self.population   = population
         self.N_generation = N_generation
-        self.mutation     = mutation
-        self.crossing     = crossing
-        self.polish       = polish
-        self.updating     = updating
+        self.mutation_s   = mutation_s
+        self.crossing_p   = crossing_p
 
         ## Empty spaces
         self.nb_calls   = 0
@@ -91,7 +94,7 @@ class FittingRUS:
 
         ## Update elastic constants --------------------------------------------------
         for param_name in self.pars_name:
-            model.parameter(param_name, str(self.member[param_name][0]) +  "[" + self.member[param_name][1] + "]")
+            model.parameter(param_name, str(self.member[param_name])+"[GPa]")
 
         ## Compute resonances --------------------------------------------------------
         model.solve(self.study_name)
@@ -131,11 +134,21 @@ class FittingRUS:
         return freqs_sim
 
 
+    def compute_diff(self, pars):
+        ## Update member with fit parameters
+        self.pars = pars
+        for param_name in self.pars_name:
+            self.member[param_name] = self.pars[param_name].value
+            print(param_name + " : " + "{0:g}".format(self.member[param_name]) + " GPa")
+        freqs_sim = self.objective_func()
+        return freqs_sim - self.freqs_data
+
+
     def compute_chi2(self, pars_array):
         ## Update member with fit parameters
         for i, param_name in enumerate(self.pars_name):
-            self.member[param_name][0] = pars_array[i]
-            print(param_name + " : " + "{0:g}".format(self.member[param_name][0]) + " " + self.member[param_name][1])
+            self.member[param_name] = pars_array[i]
+            print(param_name + " : " + "{0:g}".format(self.member[param_name]) + " GPa")
         freqs_sim = self.objective_func()
         return np.sum((freqs_sim - self.freqs_data)**2)
 
@@ -146,9 +159,8 @@ class FittingRUS:
         global model
         client = mph.Client()
         model = client.load(self.mph_file)
-        for param_name in self.pars_name:
-            model.parameter(param_name, str(self.member[param_name][0]) +  "[" + self.member[param_name][1] + "]")
-
+        for param_name, param_value in self.init_member.items():
+            model.parameter(param_name, str(param_value)+"[GPa]")
         ## Modifying COMSOL parameters >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         model.parameter('nb_freq', str(self.nb_freq_sim + 6))
 
@@ -173,34 +185,46 @@ class FittingRUS:
         self.nb_calls = 0
 
         ## Start Stopwatch
-        t0 = time.time()
+        start_total_time = time.time()
 
         ## Run fit algorithm
-        out = differential_evolution(self.compute_chi2, bounds=self.pars_bounds,
-                                     workers=workers, updating=self.updating,
-                                     polish=self.polish,
-                                     maxiter=self.N_generation,
-                                     popsize=self.population,
-                                     mutation=self.mutation,
-                                     recombination=self.crossing
-                                     )
+        if self.method=="differential_evolution_scipy" and self.parallel==True:
+            out = differential_evolution(self.compute_chi2, bounds=self.pars_bounds,
+                                         workers=workers, updating='deferred', maxiter=10000, polish=False)
+        if self.method=="differential_evolution_scipy" and self.parallel==False:
+            out = differential_evolution(self.compute_chi2, bounds=self.pars_bounds,
+                                         workers=workers, maxiter=10000)
+        if self.method=="differential_evolution":
+            out = minimize(self.compute_diff, self.pars,
+                           method='differential_evolution', maxiter=10000)
+        if self.method=="least_square":
+            out = minimize(self.compute_diff, self.pars)
+        if self.method=="shgo":
+            out = minimize(self.compute_diff, self.pars,
+                           method='shgo') # , sampling_method='sobol', options={"f_tol": 1e-16}, n = 100, iters=20)
+        else:
+            print("This method does not exist in the class")
 
         ## Display fit report
-        print(out.x)
-        print(out.message)
 
-        ## Export final parameters from the fit
-        for param_name in self.ranges_dict.keys():
-            self.member[param_name][0] = out.params[param_name].value
+        if self.method!="differential_evolution_scipy":
+            report_fit(out)
 
-        ## Close COMSOL file without saving solutions in the file
-        client.clear()
+            ## Export final parameters from the fit
+            for param_name in self.ranges_dict.keys():
+                self.member[param_name] = out.params[param_name].value
 
-        ## Close pool
+            ## Close COMSOL file without saving solutions in the file
+            client.clear()
+        else:
+            print(out.x)
+            print(out.message)
+
+
         if self.parallel == True:
             pool.terminate()
 
-        print("Done within %.6s seconds ----" % (time.time() - t0))
+        print("Done within %.6s seconds ----" % (time.time() - start_total_time))
 
 
 
