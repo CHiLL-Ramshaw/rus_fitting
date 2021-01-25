@@ -7,6 +7,7 @@ import mph
 import time
 from copy import deepcopy
 import sys
+import json
 
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -18,7 +19,7 @@ class FittingRUS:
                  study_name="resonances",
                  method="differential_evolution", parallel=False, nb_workers=1,
                  population=15, N_generation=10000, mutation=0.1, crossing=0.9,
-                 polish=False, updating='deferred',
+                 polish=False, updating='deferred', tolerance = 0.01,
                  **trash):
         ## Initialize
         self.init_member  = deepcopy(init_member)
@@ -35,10 +36,11 @@ class FittingRUS:
         self.mph_file     = mph_file
         self.missing      = missing
         self.study_name   = study_name
-        # self.method       = method # "shgo", "differential_evolution", "leastsq"
+        self.method       = method # "shgo", "differential_evolution", "leastsq"
         self.pars_name    = sorted(self.ranges_dict.keys())
+        self.fixed_name   = np.setdiff1d(sorted(self.init_member.keys()), self.pars_name)
 
-        ## for scipy
+        ## Create list of bounds
         self.pars_bounds  = []
         for param_name in self.pars_name:
             self.pars_bounds.append((ranges_dict[param_name][0], ranges_dict[param_name][-1]))
@@ -53,6 +55,7 @@ class FittingRUS:
         self.crossing     = crossing
         self.polish       = polish
         self.updating     = updating
+        self.tolerance    = tolerance
 
         ## Empty spaces
         self.nb_calls   = 0
@@ -137,6 +140,8 @@ class FittingRUS:
             self.member[param_name][0] = pars_array[i]
             print(param_name + " : " + "{0:g}".format(self.member[param_name][0]) + " " + self.member[param_name][1])
         freqs_sim = self.objective_func()
+        # freqs_sim = pars_array
+        # self.freqs_data = np.array([321, 103])
         return np.sum((freqs_sim - self.freqs_data)**2)
 
 
@@ -182,25 +187,59 @@ class FittingRUS:
                                      maxiter=self.N_generation,
                                      popsize=self.population,
                                      mutation=self.mutation,
-                                     recombination=self.crossing
+                                     recombination=self.crossing,
+                                     tol=self.tolerance
                                      )
 
-        ## Display fit report
-        print(out.x)
-        print(out.message)
-
         ## Export final parameters from the fit
-        for param_name in self.ranges_dict.keys():
-            self.member[param_name][0] = out.params[param_name].value
+        for i, param_name in enumerate(self.pars_name):
+            self.member[param_name][0] = out.x[i]
 
-        ## Close COMSOL file without saving solutions in the file
-        client.clear()
+        ## Fit report
+        duration    = np.round(time.time() - t0, 2)
+        N_points    = self.nb_freq_data
+        N_variables = len(out.x)
+        chi2 = out.fun
+        reduced_chi2 = chi2 / (N_points - N_variables)
+
+        print("\n")
+        report = "#[[Fit Statistics]]" + "\n"
+        report+= "\t# fit success        \t= " + str(out.success) + "\n"
+        report+= "\t# fitting method     \t= " + self.method + "\n"
+        report+= "\t# generations        \t= " + str(out.nit) + " + 1" + "\n"
+        report+= "\t# function evals     \t= " + str(out.nfev) + "\n"
+        report+= "\t# data points        \t= " + str(N_points) + "\n"
+        report+= "\t# variables          \t= " + str(N_variables) + "\n"
+        report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
+        report+= "\t# chi-square         \t= " + r"{0:.8f}".format(chi2) + "\n"
+        report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
+        report+= "#[[Variables]]" + "\n"
+        for i, param_name in enumerate(self.pars_name):
+            report+= "\t# " + param_name + " : " + r"{0:.8f}".format(out.x[i]) + " " + \
+                     self.member[param_name][1] + \
+                     " (init = [" + str(self.ranges_dict[param_name][0]) + \
+                     ", " +         str(self.ranges_dict[param_name][1]) + "])" + "\n"
+        report+= "#[[Fixed values]]" + "\n"
+        for fixed_name in self.fixed_name:
+            report+= "\t# " + fixed_name + " : " + \
+                     r"{0:.8f}".format(self.member[fixed_name][0]) + " " + \
+                     self.member[fixed_name][1]
+
+        print(report)
+
+        report_file = open(self.mph_file[:-4] + "_fit_report.txt", "w")
+        report_file.write(report)
+        report_file.close()
+
+        # ## Close COMSOL file without saving solutions in the file
+        # if self.parallel != True:
+        #     client.clear()
 
         ## Close pool
         if self.parallel == True:
             pool.terminate()
 
-        print("Done within %.6s seconds ----" % (time.time() - t0))
+
 
 
 
