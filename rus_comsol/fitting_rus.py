@@ -223,7 +223,7 @@ class FittingRUS:
         for fixed_name in self.fixed_name:
             report+= "\t# " + fixed_name + " : " + \
                      r"{0:.8f}".format(self.member[fixed_name][0]) + " " + \
-                     self.member[fixed_name][1]
+                     self.member[fixed_name][1] + "\n"
 
         print(report)
 
