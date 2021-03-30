@@ -35,7 +35,7 @@ class RUSComsol:
     pars = property(_get_pars, _set_pars)
 
 
-    def compute_freqs(self):
+    def compute_freqs(self, pars):
         ## Set parameters  ------------------------------------------------------
         for pars_name in self.pars_name:
             self.model.parameter(pars_name, str(self._pars[pars_name][0]) +

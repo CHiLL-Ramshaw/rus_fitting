@@ -38,11 +38,11 @@ class RUSFitting:
         self.fixedpars_name   = np.setdiff1d(sorted(self.init_pars.keys()), self.freepars_name)
 
         ## Create list of bounds
-        self.freepars_bounds  = []
+        self.bounds  = []
         for free_name in self.freepars_name:
-            self.freepars_bounds.append((self.ranges[free_name][0],
+            self.bounds.append((self.ranges[free_name][0],
                                          self.ranges[free_name][-1]))
-        self.freepars_bounds = tuple(self.freepars_bounds)
+        self.bounds = tuple(self.bounds)
 
         ## Differential evolution
         self.nb_workers   = nb_workers
@@ -105,36 +105,36 @@ class RUSFitting:
         return freqs_sim
 
 
-    def compute_chi2(self, rus_object, freepars):
+    def compute_chi2(self, freqs_calc_list):
         ## Update pars with fit parameters
-        for i, free_name in enumerate(self.freepars_name):
-            self.pars[free_name][0] = freepars[i]
-            print(free_name
-                  + " : "
-                  + "{0:g}".format(self.pars[free_name][0])
-                  + " "
-                  + self.pars[free_name][1])
-        rus_object._set_pars.remote(self.pars)
+        # for i, free_name in enumerate(self.freepars_name):
+        #     self.pars[free_name][0] = freepars[i]
+        #     print(free_name
+        #           + " : "
+        #           + "{0:g}".format(self.pars[free_name][0])
+        #           + " "
+        #           + self.pars[free_name][1])
+        # rus_object._set_pars.remote(self.pars)
 
-        start_total_time = time.time()
         ## Compute resonances ---------------------------------------------------
-        freqs_sim_calc = ray.get(rus_object.compute_freqs.remote())
         ## Remove the first 6 bad frequencies
         # freqs_sim = freqs_sim[6:]
         ## Remove the useless small frequencies
-        freqs_sim_calc = freqs_sim_calc[freqs_sim_calc > 1e-4]
-        freqs_sim = self.sort_freqs(freqs_sim_calc)
+        chi2 = np.empty(len(freqs_calc_list))
+        for i, freqs_calc in enumerate(freqs_calc_list):
+            freqs_calc = freqs_calc[freqs_calc > 1e-4]
+            freqs_sim  = self.sort_freqs(freqs_calc)
+            chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)
 
         # self.nb_calls += 1
         # print("---- call #" + str(self.nb_calls) + " in %.6s seconds ----" % (time.time() - start_total_time))
-        print("---- call in %.6s seconds ----" % (time.time() - start_total_time))
-        sys.stdout.flush()
+        # print("---- call in %.6s seconds ----" % (time.time() - start_total_time))
+        # sys.stdout.flush()
+        return chi2
 
-        return np.sum((freqs_sim - self.freqs_data)**2)
 
-
-    def compute_chi2_series(self, freepars, rus_object):
-        return self.compute_chi2(self.rus_object, freepars)
+    def fake(self, value):
+        return 0
 
 
     def generate_workers(self):
@@ -156,9 +156,10 @@ class RUSFitting:
         map(fun, iterable) that the arguments of this function are the same
         but func is not being used
         """
-        # res = self.pool.map(lambda worker, value : worker.co.remote(value), iterable)
-        chi2s = self.pool.map(self.compute_chi2, iterable)
-        return list(chi2s)
+        freqs_calc_list = self.pool.map(lambda worker, value:
+                                 worker.compute_freqs.remote(lambda : worker._set_pars.remote(value)), iterable)
+        chi2 = self.compute_chi2(list(freqs_calc_list))
+        return chi2
 
 
     def run_fit(self):
@@ -178,7 +179,7 @@ class RUSFitting:
         ## Run fit algorithm
 
         # if self.nb_workers > 1:
-        out = differential_evolution(self.compute_chi2_series, bounds=self.freepars_bounds,
+        out = differential_evolution(self.fake, bounds=self.bounds,
                                     workers=self.map, updating=self.updating,
                                     polish=self.polish,
                                     maxiter=self.N_generation,
@@ -188,7 +189,7 @@ class RUSFitting:
                                     tol=self.tolerance
                                     )
         # else:
-        #     out = differential_evolution(self.compute_chi2_series, bounds=self.freepars_bounds,
+        #     out = differential_evolution(self.compute_chi2_series, bounds=self.bounds,
         #                                 updating=self.updating,
         #                                 polish=self.polish,
         #                                 maxiter=self.N_generation,
