@@ -57,7 +57,9 @@ class RUSFitting:
         self.tolerance    = tolerance
 
         ## Empty spaces
+        self.best_chi2  = 0
         self.nb_calls   = 0
+        self.nb_gens    = 0
         self.json_name  = None
         self.freqs_data = None # in MHz
 
@@ -102,39 +104,20 @@ class RUSFitting:
         else:
             ## Only select the first number of "freq to compare"
             freqs_sim = freqs_sim_calc[:self.nb_freq_data]
+        sys.stdout.flush()
         return freqs_sim
 
 
     def compute_chi2(self, freqs_calc_list):
-        ## Update pars with fit parameters
-        # for i, free_name in enumerate(self.freepars_name):
-        #     self.pars[free_name][0] = freepars[i]
-        #     print(free_name
-        #           + " : "
-        #           + "{0:g}".format(self.pars[free_name][0])
-        #           + " "
-        #           + self.pars[free_name][1])
-        # rus_object._set_pars.remote(self.pars)
-
-        ## Compute resonances ---------------------------------------------------
-        ## Remove the first 6 bad frequencies
-        # freqs_sim = freqs_sim[6:]
         ## Remove the useless small frequencies
         chi2 = np.empty(len(freqs_calc_list))
         for i, freqs_calc in enumerate(freqs_calc_list):
+            ## Remove the first 6 bad frequencies
+            # freqs_sim = freqs_sim[6:]
             freqs_calc = freqs_calc[freqs_calc > 1e-4]
             freqs_sim  = self.sort_freqs(freqs_calc)
             chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)
-
-        # self.nb_calls += 1
-        # print("---- call #" + str(self.nb_calls) + " in %.6s seconds ----" % (time.time() - start_total_time))
-        # print("---- call in %.6s seconds ----" % (time.time() - start_total_time))
-        # sys.stdout.flush()
         return chi2
-
-
-    def fake(self, value):
-        return 0
 
 
     def generate_workers(self):
@@ -150,16 +133,39 @@ class RUSFitting:
         self.pool = ray.util.ActorPool(self.workers)
 
 
+    def update_worker(self, worker, value):
+        ## Update pars with fit parameters
+        pars = deepcopy(self.init_pars)
+        for i, free_name in enumerate(self.freepars_name):
+            pars[free_name][0] = value[i]
+            print(free_name
+                  + " : "
+                  + "{0:g}".format(pars[free_name][0])
+                  + " "
+                  + pars[free_name][1])
+        worker._set_pars.remote(pars)
+        sys.stdout.flush()
+        return worker.compute_freqs.remote() #, worker._get_pars.remote()
+
+
     def map(self, func, iterable):
         """
         It is because Pool.map from multiprocessing has the shape
         map(fun, iterable) that the arguments of this function are the same
         but func is not being used
         """
-        freqs_calc_list = self.pool.map(lambda worker, value:
-                                 worker.compute_freqs.remote(lambda : worker._set_pars.remote(value)), iterable)
+        start_total_time = time.time()
+        freqs_calc_list = self.pool.map(self.update_worker, iterable)
         chi2 = self.compute_chi2(list(freqs_calc_list))
+        self.nb_gens += 1
+        print("---- Generation #" + str(self.nb_gens) + " over in %.6s seconds ----" % (time.time() - start_total_time))
         return chi2
+
+
+    def polish_func(self, single_value):
+        freqs_calc_list = self.pool.map(self.update_worker, single_value)
+        chi2 = self.compute_chi2(list(freqs_calc_list))
+        return chi2[0]
 
 
     def run_fit(self):
@@ -179,7 +185,7 @@ class RUSFitting:
         ## Run fit algorithm
 
         # if self.nb_workers > 1:
-        out = differential_evolution(self.fake, bounds=self.bounds,
+        out = differential_evolution(self.polish_func, bounds=self.bounds,
                                     workers=self.map, updating=self.updating,
                                     polish=self.polish,
                                     maxiter=self.N_generation,
@@ -244,9 +250,9 @@ class RUSFitting:
         # if self.parallel != True:
         #     client.clear()
 
-        ## Close pool
-        if self.nb_workers > 1:
-            pool.terminate()
+        # ## Close pool
+        # if self.nb_workers > 1:
+        #     pool.terminate()
 
 
 

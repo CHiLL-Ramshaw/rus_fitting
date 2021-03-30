@@ -25,7 +25,6 @@ class RUSComsol:
         return self._nb_freq
     def _set_nb_freq(self, nb_freq):
         self._nb_freq = nb_freq
-        self.model.parameter('nb_freq', str(self._nb_freq + 6))
     nb_freq = property(_get_nb_freq, _set_nb_freq)
 
     def _get_pars(self):
@@ -35,7 +34,9 @@ class RUSComsol:
     pars = property(_get_pars, _set_pars)
 
 
-    def compute_freqs(self, pars):
+    def compute_freqs(self):
+        ## Set number of frequencies --------------------------------------------
+        self.model.parameter('nb_freq', str(self._nb_freq + 6))
         ## Set parameters  ------------------------------------------------------
         for pars_name in self.pars_name:
             self.model.parameter(pars_name, str(self._pars[pars_name][0]) +
@@ -51,4 +52,3 @@ class RUSComsol:
         """Initialize the COMSOL file"""
         self.client = mph.Client()
         self.model = self.client.load(self.mph_file)
-        self.model.parameter('nb_freq', str(self._nb_freq + 6))
