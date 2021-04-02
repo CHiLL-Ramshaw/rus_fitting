@@ -30,14 +30,16 @@ class RUSComsol:
     def _get_pars(self):
         return self._pars
     def _set_pars(self, pars):
-        self._pars = pars
+        self._pars = deepcopy(pars)
     pars = property(_get_pars, _set_pars)
 
 
-    def compute_freqs(self):
+    def compute_freqs(self, pars=None):
         ## Set number of frequencies --------------------------------------------
         self.model.parameter('nb_freq', str(self._nb_freq + 6))
         ## Set parameters  ------------------------------------------------------
+        if pars != None:
+            self.pars = pars
         for pars_name in self.pars_name:
             self.model.parameter(pars_name, str(self._pars[pars_name][0]) +
                                  "[" + self._pars[pars_name][1] + "]")

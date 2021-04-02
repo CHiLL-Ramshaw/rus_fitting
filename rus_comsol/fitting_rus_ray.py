@@ -16,7 +16,7 @@ class RUSFitting:
                  missing=True,
                  nb_workers=4,
                  population=15, N_generation=10000, mutation=0.1, crossing=0.9,
-                 polish=False, updating='deferred', tolerance = 0.01,
+                 polish=False, updating='deferred', tolerance = 0.001,
                  **trash):
         """
         If nb_workers = 1, the calculation is in series
@@ -110,13 +110,14 @@ class RUSFitting:
 
     def compute_chi2(self, freqs_calc_list):
         ## Remove the useless small frequencies
-        chi2 = np.empty(len(freqs_calc_list))
+        chi2 = np.empty(len(freqs_calc_list), dtype=np.float64)
         for i, freqs_calc in enumerate(freqs_calc_list):
             ## Remove the first 6 bad frequencies
             # freqs_sim = freqs_sim[6:]
             freqs_calc = freqs_calc[freqs_calc > 1e-4]
             freqs_sim  = self.sort_freqs(freqs_calc)
             chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)
+        print(chi2)
         return chi2
 
 
@@ -143,9 +144,9 @@ class RUSFitting:
                   + "{0:g}".format(pars[free_name][0])
                   + " "
                   + pars[free_name][1])
-        worker._set_pars.remote(pars)
+        # worker._set_pars.remote(pars)
         sys.stdout.flush()
-        return worker.compute_freqs.remote() #, worker._get_pars.remote()
+        return worker.compute_freqs.remote(pars) #, worker._get_pars.remote()
 
 
     def map(self, func, iterable):
@@ -194,6 +195,8 @@ class RUSFitting:
                                     recombination=self.crossing,
                                     tol=self.tolerance
                                     )
+
+
         # else:
         #     out = differential_evolution(self.compute_chi2_series, bounds=self.bounds,
         #                                 updating=self.updating,
