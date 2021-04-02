@@ -15,8 +15,8 @@ class RUSFitting:
                  nb_freq_data, nb_freq_sim,
                  missing=True,
                  nb_workers=4,
-                 population=15, N_generation=10000, mutation=0.1, crossing=0.9,
-                 polish=False, updating='deferred', tolerance = 0.001,
+                 population=15, N_generation=10000, mutation=0.7, crossing=0.9,
+                 polish=False, updating='deferred', tolerance=0.01,
                  **trash):
         """
         If nb_workers = 1, the calculation is in series
@@ -139,11 +139,11 @@ class RUSFitting:
         pars = deepcopy(self.init_pars)
         for i, free_name in enumerate(self.freepars_name):
             pars[free_name][0] = value[i]
-            print(free_name
-                  + " : "
-                  + "{0:g}".format(pars[free_name][0])
-                  + " "
-                  + pars[free_name][1])
+            # print(free_name
+            #       + " : "
+            #       + "{0:g}".format(pars[free_name][0])
+            #       + " "
+            #       + pars[free_name][1])
         # worker._set_pars.remote(pars)
         sys.stdout.flush()
         return worker.compute_freqs.remote(pars) #, worker._get_pars.remote()

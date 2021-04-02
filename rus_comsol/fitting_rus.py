@@ -18,8 +18,8 @@ class FittingRUS:
                  missing=True,
                  study_name="resonances",
                  method="differential_evolution", parallel=False, nb_workers=1,
-                 population=15, N_generation=10000, mutation=0.1, crossing=0.9,
-                 polish=False, updating='deferred', tolerance = 0.01,
+                 population=15, N_generation=10000, mutation=0.7, crossing=0.9,
+                 polish=False, updating='deferred', tolerance=0.01,
                  **trash):
         ## Initialize
         self.init_member  = deepcopy(init_member)
