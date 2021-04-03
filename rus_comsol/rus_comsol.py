@@ -7,8 +7,7 @@ class RUSComsol:
                  mph_file,
                  nb_freq,
                  study_name="resonances",
-                 init=False,
-                 **trash):
+                 init=False):
         self._pars         = deepcopy(pars)
         self.pars_name    = sorted(self._pars.keys())
         self._nb_freq     = nb_freq
