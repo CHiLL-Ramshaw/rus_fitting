@@ -54,3 +54,6 @@ class RUSComsol:
         """Initialize the COMSOL file"""
         self.client = mph.Client()
         self.model = self.client.load(self.mph_file)
+
+    def stop_comsol(self):
+        self.client.clear()

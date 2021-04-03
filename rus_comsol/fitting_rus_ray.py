@@ -45,7 +45,12 @@ class RUSFitting:
         self.bounds = tuple(self.bounds)
 
         ## Differential evolution
-        self.nb_workers   = nb_workers
+        if nb_workers > cpu_count(logical=False):
+            nb_workers = cpu_count(logical=False)
+            print("!! Changed #workers to "
+                  + str(nb_workers)
+                  + " the #max of available cores !!")
+        self._nb_workers   = nb_workers
         self.workers      = []
         self.pool         = None
         self.population   = population # (popsize = population * len(x))
@@ -66,7 +71,19 @@ class RUSFitting:
         ## Load data
         self.load_data()
 
+    ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    def _get_nb_workers(self):
+        return self._nb_workers
+    def _set_nb_workers(self, nb_workers):
+        if nb_workers > cpu_count(logical=False):
+            nb_workers = cpu_count(logical=False)
+            print("!! Changed #workers to "
+                  + str(nb_workers)
+                  + " the #max of available cores !!")
+        self._nb_workers = nb_workers
+    nb_workers = property(_get_nb_workers, _set_nb_workers)
 
+    ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def load_data(self):
         """
         Frequencies should be in MHz
@@ -117,14 +134,11 @@ class RUSFitting:
             freqs_calc = freqs_calc[freqs_calc > 1e-4]
             freqs_sim  = self.sort_freqs(freqs_calc)
             chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)
-        print(chi2)
         return chi2
 
 
     def generate_workers(self):
-        print(">>>>  Worker Init <<<<")
-        sys.stdout.flush()
-        for _ in range(self.nb_workers):
+        for _ in range(self._nb_workers):
             worker = ray.remote(RUSComsol).remote(pars=self.pars,
                                         mph_file=self.rus_object.mph_file,
                                         nb_freq=self.nb_freq_sim,
@@ -144,9 +158,12 @@ class RUSFitting:
             #       + "{0:g}".format(pars[free_name][0])
             #       + " "
             #       + pars[free_name][1])
-        # worker._set_pars.remote(pars)
         sys.stdout.flush()
         return worker.compute_freqs.remote(pars) #, worker._get_pars.remote()
+
+    def close_workers(self):
+        for worker in self.workers:
+            worker.stop_comsol.remote()
 
 
     def map(self, func, iterable):
@@ -158,8 +175,11 @@ class RUSFitting:
         start_total_time = time.time()
         freqs_calc_list = self.pool.map(self.update_worker, iterable)
         chi2 = self.compute_chi2(list(freqs_calc_list))
+        print("Gen "
+              + str(self.nb_gens) + ":: Pop "
+              + str(self.population * len(self.freepars_name))
+              + " :: %.6s s" % (time.time() - start_total_time))
         self.nb_gens += 1
-        print("---- Generation #" + str(self.nb_gens) + " over in %.6s seconds ----" % (time.time() - start_total_time))
         return chi2
 
 
@@ -170,22 +190,21 @@ class RUSFitting:
 
 
     def run_fit(self):
-        if self.nb_workers > 1:
-            print("# of available cores: ", cpu_count())
-            self.generate_workers()
-            print("--- Pool initialized with ", self.nb_workers, " workers ---")
-        # else:
-        #     self.rus_object.start_comsol()
-        #     self.rus_object.nb_freq = self.nb_freq_sim
+        ## Start Ray
+        ray.init(num_cpus=cpu_count(logical=False),
+                 include_dashboard=False,
+                 log_to_driver=False)
 
-        # ## Initialize number of calls
-        # self.nb_calls = 0
+        self.generate_workers()
+        print("--- Pool of "
+              + str(self._nb_workers)
+              + " workers for "
+              + str(cpu_count(logical=False))
+              + " cores ---")
 
         ## Start Stopwatch
         t0 = time.time()
         ## Run fit algorithm
-
-        # if self.nb_workers > 1:
         out = differential_evolution(self.polish_func, bounds=self.bounds,
                                     workers=self.map, updating=self.updating,
                                     polish=self.polish,
@@ -195,18 +214,6 @@ class RUSFitting:
                                     recombination=self.crossing,
                                     tol=self.tolerance
                                     )
-
-
-        # else:
-        #     out = differential_evolution(self.compute_chi2_series, bounds=self.bounds,
-        #                                 updating=self.updating,
-        #                                 polish=self.polish,
-        #                                 maxiter=self.N_generation,
-        #                                 popsize=self.population,
-        #                                 mutation=self.mutation,
-        #                                 recombination=self.crossing,
-        #                                 tol=self.tolerance
-        #                                 )
 
         ## Export final parameters from the fit
         for i, free_name in enumerate(self.freepars_name):
@@ -249,14 +256,13 @@ class RUSFitting:
         report_file.write(report)
         report_file.close()
 
-        # ## Close COMSOL file without saving solutions in the file
-        # if self.parallel != True:
-        #     client.clear()
+        ## Close COMSOL for each workers
+        self.close_workers()
 
-        # ## Close pool
-        # if self.nb_workers > 1:
-        #     pool.terminate()
+        ## Stop Ray
+        ray.shutdown()
 
+        return self.rus_object
 
 
 
