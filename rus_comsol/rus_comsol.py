@@ -6,16 +6,18 @@ class RUSComsol:
     def __init__(self, pars,
                  mph_file,
                  nb_freq,
-                 study_name="resonances",
+                 study_name="Study 1",
+                 study_tag="std1",
                  init=False):
-        self._pars         = deepcopy(pars)
-        self.pars_name    = sorted(self._pars.keys())
-        self._nb_freq     = nb_freq
-        self.mph_file     = mph_file
-        self.study_name   = study_name
-        self.client       = None
-        self.model        = None
-        self.freqs        = None
+        self._pars      = deepcopy(pars)
+        self.pars_name  = sorted(self._pars.keys())
+        self._nb_freq   = nb_freq
+        self.mph_file   = mph_file
+        self.study_name = study_name
+        self.study_tag  = study_tag
+        self.client     = None
+        self.model      = None
+        self.freqs      = None
         if init == True:
             self.start_comsol()
 
@@ -44,7 +46,7 @@ class RUSComsol:
                                  "[" + self._pars[pars_name][1] + "]")
         ## Compute resonances ---------------------------------------------------
         self.model.solve(self.study_name)
-        self.freqs = self.model.evaluate('abs(freq)', 'MHz')
+        self.freqs = self.model.evaluate('abs(freq)', 'MHz')[6:]
         self.model.clear()
         self.model.reset()
         return self.freqs
@@ -53,6 +55,10 @@ class RUSComsol:
         """Initialize the COMSOL file"""
         self.client = mph.Client()
         self.model = self.client.load(self.mph_file)
+        ## Forces to get all the resonances from 0 MHz
+        self.model.java.study(self.study_tag).feature("eig").set('shiftactive', 'on')
+        self.model.java.study(self.study_tag).feature("eig").set('shift', '0')
+
 
     def stop_comsol(self):
         self.client.clear()

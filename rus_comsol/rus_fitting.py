@@ -12,7 +12,7 @@ from rus_comsol.rus_comsol import RUSComsol
 class RUSFitting:
     def __init__(self, rus_object, ranges,
                  freqs_file,
-                 nb_freq_data, nb_freq_sim,
+                 nb_freq_data, nb_freq_sim, # nb_freqs, nb_freqs_missing
                  missing=True,
                  nb_workers=4,
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
@@ -67,6 +67,7 @@ class RUSFitting:
         self.freqs_data = None # in MHz
 
         ## Load data
+        self.col_freqs = 0
         self.load_data()
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -87,7 +88,7 @@ class RUSFitting:
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
-        freqs_data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
+        freqs_data = np.loadtxt(self.freqs_file, dtype="float", comments="#")[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
         self.freqs_data = freqs_data[:self.nb_freq_data]
 
@@ -127,9 +128,6 @@ class RUSFitting:
         chi2 = np.empty(len(freqs_calc_list), dtype=np.float64)
         freqs_missing_list = []
         for i, freqs_calc in enumerate(freqs_calc_list):
-            ## Remove the first 6 bad frequencies
-            # freqs_sim = freqs_sim[6:]
-            freqs_calc = freqs_calc[freqs_calc > 1e-4]
             freqs_sim, freqs_missing = self.sort_freqs(freqs_calc)
             freqs_missing_list.append(freqs_missing)
             chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)

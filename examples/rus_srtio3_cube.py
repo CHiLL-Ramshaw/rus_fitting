@@ -22,13 +22,15 @@ ranges_dict  = {"c11": [300, 350],
 
 rus_object = RUSComsol(pars=init_member,
                        mph_file="srtio3/rus_srtio3_cube.mph",
-                       nb_freq=10)
+                       nb_freq=10, study_name="resonances")
 
-fitObject = RUSFitting(rus_object=rus_object, ranges=ranges_dict,
-                       freqs_file="srtio3/SrTiO3_RT_frequencies.dat",
-                       nb_freq_data = 42, nb_freq_sim = 50,
-                       nb_workers=2)
-fitObject.run_fit()
+rus_object.start_comsol()
+print(rus_object.compute_freqs())
+# fitObject = RUSFitting(rus_object=rus_object, ranges=ranges_dict,
+#                        freqs_file="srtio3/SrTiO3_RT_frequencies.dat",
+#                        nb_freq_data = 42, nb_freq_sim = 50,
+#                        nb_workers=2)
+# fitObject.run_fit()
 
 
 
