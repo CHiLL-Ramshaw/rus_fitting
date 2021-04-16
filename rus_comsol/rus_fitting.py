@@ -12,28 +12,28 @@ from rus_comsol.rus_comsol import RUSComsol
 class RUSFitting:
     def __init__(self, rus_object, ranges,
                  freqs_file,
-                 nb_freq_data, nb_freq_sim, # nb_freqs, nb_freqs_missing
-                 missing=True,
+                 nb_freqs, nb_max_missing,
                  nb_workers=4,
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
                  polish=False, updating='deferred', tolerance=0.01):
-        """
-        If nb_workers = 1, the calculation is in series
-        """
         self.rus_object = rus_object
         self.init_pars  = deepcopy(self.rus_object.pars)
         self.best_pars  = deepcopy(self.rus_object.pars)
         self.last_gen   = None
         self.ranges     = ranges
-        try:
-            assert nb_freq_sim >= nb_freq_data
-        except AssertionError:
-            print("You need --- nb_freq_sim > nb_freq_data")
-            sys.exit(1)
-        self.nb_freq_data     = nb_freq_data
-        self.nb_freq_sim      = nb_freq_sim
+
+        # try:
+        #     assert nb_freqs + nb_max_missing > self.freqs_data.size
+        # except AssertionError:
+        #     print("You need --- nb_freqs <= nb of data resonances")
+        #     sys.exit(1)
+
+        ## Load data
+        self.nb_freqs         = nb_freqs
+        self.nb_max_missing   = nb_max_missing
         self.freqs_file       = freqs_file
-        self.missing          = missing
+        self.col_freqs        = 0
+        self.freqs_data       = self.load_data()
         self.freepars_name    = sorted(self.ranges.keys())
         self.fixedpars_name   = np.setdiff1d(sorted(self.init_pars.keys()), self.freepars_name)
 
@@ -50,7 +50,7 @@ class RUSFitting:
             print("!! Changed #workers to "
                   + str(nb_workers)
                   + " the #max of available cores !!")
-        self._nb_workers   = nb_workers
+        self._nb_workers  = nb_workers
         self.workers      = []
         self.pool         = None
         self.population   = population # (popsize = population * len(x))
@@ -64,11 +64,6 @@ class RUSFitting:
         ## Empty spaces
         self.best_chi2  = None
         self.nb_gens    = 0
-        self.freqs_data = None # in MHz
-
-        ## Load data
-        self.col_freqs = 0
-        self.load_data()
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def _get_nb_workers(self):
@@ -88,9 +83,11 @@ class RUSFitting:
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
-        freqs_data = np.loadtxt(self.freqs_file, dtype="float", comments="#")[:,self.col_freqs]
+        freqs_data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
+        if freqs_data.size is tuple:
+            freqs_data = freqs_data[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
-        self.freqs_data = freqs_data[:self.nb_freq_data]
+        return freqs_data[:self.nb_freqs]
 
 
     def assignement(self, freqs_data, freqs_sim):
@@ -105,7 +102,7 @@ class RUSFitting:
 
 
     def sort_freqs(self, freqs_sim_calc):
-        if self.missing == True:
+        if self.nb_max_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
             index_sim, freqs_sim = self.assignement(self.freqs_data, freqs_sim_calc)
             ## Give the missing frequencies in the data -------------------------
@@ -118,7 +115,7 @@ class RUSFitting:
             freqs_missing = freqs_sim_calc[index_missing]
         else:
             ## Only select the first number of "freq to compare"
-            freqs_sim = freqs_sim_calc[:self.nb_freq_data]
+            freqs_sim = freqs_sim_calc[:self.nb_freqs]
             freqs_missing = []
         return freqs_sim, freqs_missing
 
@@ -144,10 +141,10 @@ class RUSFitting:
     def generate_workers(self):
         for _ in range(self._nb_workers):
             worker = ray.remote(RUSComsol).remote(pars=self.init_pars,
-                                        mph_file=self.rus_object.mph_file,
-                                        nb_freq=self.nb_freq_sim,
-                                        study_name=self.rus_object.study_name,
-                                        init=True)
+                                    mph_file=self.rus_object.mph_file,
+                                    nb_freq=self.nb_freqs+self.nb_max_missing,
+                                    study_name=self.rus_object.study_name,
+                                    init=True)
             self.workers.append(worker)
         self.pool = ray.util.ActorPool(self.workers)
 
@@ -231,7 +228,7 @@ class RUSFitting:
 
         ## Fit report
         duration    = np.round(time.time() - t0, 2)
-        N_points    = self.nb_freq_data
+        N_points    = self.nb_freqs
         N_variables = len(out.x)
         chi2 = out.fun
         reduced_chi2 = chi2 / (N_points - N_variables)

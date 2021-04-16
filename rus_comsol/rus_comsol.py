@@ -51,6 +51,7 @@ class RUSComsol:
         self.model.reset()
         return self.freqs
 
+
     def start_comsol(self):
         """Initialize the COMSOL file"""
         self.client = mph.Client()
