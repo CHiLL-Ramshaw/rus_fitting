@@ -3,17 +3,21 @@ from numpy import cos, sin
 from copy import deepcopy
 
 class ElasticConstants:
-    def __init__(self, elastic_dict,
-                symmetry="tetragonal",
+    def __init__(self, cij_dict, symmetry,
                 angle_x=0, angle_y=0, angle_z=0):
-        self._elastic_dict = elastic_dict
-        self.symmetry      = symmetry
-        self._angle_x      = angle_x
-        self._angle_y      = angle_y
-        self._angle_z      = angle_z
+        """
+        - The elastic constants in elasti_dict must be in GPa
+        - symmetry can be "cubic", "tetragonal", "orthorhombic"
+        - angles should be in degrees, angle_x corresponds to rotation around x
+        """
+        self._cij_dict = cij_dict
+        self.symmetry  = symmetry
+        self._angle_x  = angle_x
+        self._angle_y  = angle_y
+        self._angle_z  = angle_z
 
         ## Build Voigt
-        self.voigt_matrix = self.elastic_dict_to_voigt_matrix()
+        self.voigt_matrix = self.cij_dict_to_voigt_matrix()
         self.R = self.rotation_matrix()
         self.rotation_voigt()
         self.voigt_dict   = self.voigt_matrix_to_voigt_dict()
@@ -22,45 +26,45 @@ class ElasticConstants:
     ## Special Method >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>#
     def __setitem__(self, key, value):
         ## Add security not to add keys later
-        if key not in self._elastic_dict.keys():
+        if key not in self._cij_dict.keys():
             print(key + " was not added (new band parameters are only allowed within object initialization)")
         else:
-            self._elastic_dict[key] = value
-            self.elastic_dict_to_voigt_matrix()
+            self._cij_dict[key] = value
+            self.cij_dict_to_voigt_matrix()
             self.rotation_voigt()
             self.voigt_matrix_to_voigt_dict()
 
     def __getitem__(self, key):
         try:
-            assert self._elastic_dict[key]
+            assert self._cij_dict[key]
         except KeyError:
-            print(key + " is not a defined in elastic_dict")
+            print(key + " is not a defined in cij_dict")
         else:
-            return self._elastic_dict[key]
+            return self._cij_dict[key]
 
-    def get_elastic_dict(self, key):
+    def get_cij_value(self, key):
         return self[key]
 
-    def set_elastic_dict(self, key, val):
+    def set_cij_value(self, key, val):
         self[key] = val
 
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    def _get_elastic_dict(self):
-        return self._elastic_dict
-    def _set_elastic_dict(self, elastic_dict):
-        self._elastic_dict = deepcopy(elastic_dict)
-        self.elastic_dict_to_voigt_matrix()
+    def _get_cij_dict(self):
+        return self._cij_dict
+    def _set_cij_dict(self, cij_dict):
+        self._cij_dict = deepcopy(cij_dict)
+        self.cij_dict_to_voigt_matrix()
         self.rotation_voigt()
         self.voigt_matrix_to_voigt_dict()
-    elastic_dict = property(_get_elastic_dict, _set_elastic_dict)
+    cij_dict = property(_get_cij_dict, _set_cij_dict)
 
     def _get_angle_x(self):
         return self._angle_x
     def _set_angle_x(self, angle_x):
         self._angle_x = angle_x
         self.rotation_matrix()
-        self.elastic_dict_to_voigt_matrix()
+        self.cij_dict_to_voigt_matrix()
         self.rotation_voigt()
         self.voigt_matrix_to_voigt_dict()
     angle_x = property(_get_angle_x, _set_angle_x)
@@ -70,7 +74,7 @@ class ElasticConstants:
     def _set_angle_y(self, angle_y):
         self._angle_y = angle_y
         self.rotation_matrix()
-        self.elastic_dict_to_voigt_matrix()
+        self.cij_dict_to_voigt_matrix()
         self.rotation_voigt()
         self.voigt_matrix_to_voigt_dict()
     angle_y = property(_get_angle_y, _set_angle_y)
@@ -80,62 +84,62 @@ class ElasticConstants:
     def _set_angle_z(self, angle_z):
         self._angle_z = angle_z
         self.rotation_matrix()
-        self.elastic_dict_to_voigt_matrix()
+        self.cij_dict_to_voigt_matrix()
         self.rotation_voigt()
         self.voigt_matrix_to_voigt_dict()
     angle_z = property(_get_angle_z, _set_angle_z)
 
 
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    def elastic_dict_to_voigt_matrix(self):
+    def cij_dict_to_voigt_matrix(self):
         """
         returns the elastic tensor from given elastic constants in pars
         (a dictionary of elastic constants)
         based on the length of pars it decides what crystal structure we the sample has
         """
-        elastic_dict = deepcopy(self.elastic_dict)
+        cij_dict = deepcopy(self.cij_dict)
         voigt_matrix = np.zeros((6,6))
 
         if self.symmetry=="cubic":
-            voigt_matrix[0,0] = voigt_matrix[1,1] = voigt_matrix[2,2] = elastic_dict['c11']
-            voigt_matrix[0,1] = voigt_matrix[0,2] = voigt_matrix[1,2] = elastic_dict['c12']
-            voigt_matrix[3,3] = voigt_matrix[4,4] = voigt_matrix[5,5] = elastic_dict['c44']
+            voigt_matrix[0,0] = voigt_matrix[1,1] = voigt_matrix[2,2] = cij_dict['c11']
+            voigt_matrix[0,1] = voigt_matrix[0,2] = voigt_matrix[1,2] = cij_dict['c12']
+            voigt_matrix[3,3] = voigt_matrix[4,4] = voigt_matrix[5,5] = cij_dict['c44']
 
         elif self.symmetry=="tetragonal":
-            voigt_matrix[0,0] = voigt_matrix[1,1] = elastic_dict['c11']
-            voigt_matrix[2,2]                     = elastic_dict['c33']
-            voigt_matrix[0,1]                     = elastic_dict['c12']
-            voigt_matrix[0,2] = voigt_matrix[1,2] = elastic_dict['c13']
-            voigt_matrix[3,3] = voigt_matrix[4,4] = elastic_dict['c44']
-            voigt_matrix[5,5]                     = elastic_dict['c66']
+            voigt_matrix[0,0] = voigt_matrix[1,1] = cij_dict['c11']
+            voigt_matrix[2,2]                     = cij_dict['c33']
+            voigt_matrix[0,1]                     = cij_dict['c12']
+            voigt_matrix[0,2] = voigt_matrix[1,2] = cij_dict['c13']
+            voigt_matrix[3,3] = voigt_matrix[4,4] = cij_dict['c44']
+            voigt_matrix[5,5]                     = cij_dict['c66']
 
         elif self.symmetry=="orthorhombic":
-            voigt_matrix[0,0] = elastic_dict['c11']
-            voigt_matrix[1,1] = elastic_dict['c22']
-            voigt_matrix[2,2] = elastic_dict['c33']
-            voigt_matrix[0,1] = elastic_dict['c12']
-            voigt_matrix[0,2] = elastic_dict['c13']
-            voigt_matrix[1,2] = elastic_dict['c23']
-            voigt_matrix[3,3] = elastic_dict['c44']
-            voigt_matrix[4,4] = elastic_dict['c55']
-            voigt_matrix[5,5] = elastic_dict['c66']
+            voigt_matrix[0,0] = cij_dict['c11']
+            voigt_matrix[1,1] = cij_dict['c22']
+            voigt_matrix[2,2] = cij_dict['c33']
+            voigt_matrix[0,1] = cij_dict['c12']
+            voigt_matrix[0,2] = cij_dict['c13']
+            voigt_matrix[1,2] = cij_dict['c23']
+            voigt_matrix[3,3] = cij_dict['c44']
+            voigt_matrix[4,4] = cij_dict['c55']
+            voigt_matrix[5,5] = cij_dict['c66']
 
-        # elif len(elastic_dict) == 5:                    # hexagonal
-        #     indicator = np.any( np.array([i=='c11' for i in elastic_dict]) )
+        # elif len(cij_dict) == 5:                    # hexagonal
+        #     indicator = np.any( np.array([i=='c11' for i in cij_dict]) )
         #     if indicator == True:
-        #         c11 = c22       = elastic_dict['c11']
-        #         c33             = elastic_dict['c33']
-        #         c12             = elastic_dict['c12']
-        #         c13 = c23       = elastic_dict['c13']
-        #         c44 = c55       = elastic_dict['c44']
-        #         c66             = (elastic_dict['c11']-elastic_dict['c12'])/2
+        #         c11 = c22       = cij_dict['c11']
+        #         c33             = cij_dict['c33']
+        #         c12             = cij_dict['c12']
+        #         c13 = c23       = cij_dict['c13']
+        #         c44 = c55       = cij_dict['c44']
+        #         c66             = (cij_dict['c11']-cij_dict['c12'])/2
         #     else:
-        #         c11 = c22       = 2*elastic_dict['c66'] + elastic_dict['c12']
-        #         c33             = elastic_dict['c33']
-        #         c12             = elastic_dict['c12']
-        #         c13 = c23       = elastic_dict['c13']
-        #         c44 = c55       = elastic_dict['c44']
-        #         c66             = elastic_dict['c66']
+        #         c11 = c22       = 2*cij_dict['c66'] + cij_dict['c12']
+        #         c33             = cij_dict['c33']
+        #         c12             = cij_dict['c12']
+        #         c13 = c23       = cij_dict['c13']
+        #         c44 = c55       = cij_dict['c44']
+        #         c66             = cij_dict['c66']
 
         self.voigt_matrix = (voigt_matrix + voigt_matrix.T
                              - np.diag(voigt_matrix.diagonal()))
@@ -334,10 +338,11 @@ class ElasticConstants:
 
 
 if __name__=="__main__":
-    elastic_dict = {'c11':110, 'c33':90, 'c13':70, 'c12':50, 'c44':30, 'c66':10}
-    e1 = ElasticConstants(elastic_dict, symmetry="tetragonal")
+    cij_dict = {'c11':110, 'c33':90, 'c13':70, 'c12':50, 'c44':30, 'c66':10}
+    e1 = ElasticConstants(cij_dict, symmetry="tetragonal")
     print(e1.voigt_matrix)
-    print(e1.voigt_dict)
+    for key in sorted(e1.voigt_dict.keys()):
+        print(key, e1.voigt_dict[key])
     e1.angle_x = 5
     e1.angle_z = 15
     print(np.round(e1.voigt_matrix, 0))
