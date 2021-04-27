@@ -1,31 +1,37 @@
 import numpy as np
 from scipy import linalg
 from copy import deepcopy
+from rus_comsol.elastic_constants import ElasticConstants
+##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-class RUSRPR:
-    def __init__(self, cij_dict,
+class RUSRPR(ElasticConstants):
+    def __init__(self, cij_dict, symmetry,
                  mass, dimensions,
-                 order, nb_freq=0,
+                 order, nb_freq,
+                 angle_x=0, angle_y=0, angle_z=0,
                  init=False):
         """
-        cij_dict: a dictionary of elastic constants in Pa
+        cij_dict: a dictionary of elastic constants in GPa
         mass: a number in kg
         dimensions: numpy array of x, y, z lengths in m
         order: integer - highest order polynomial used to express basis functions
         nb_freq: number of frequencies to display
         method: fitting method
         """
-        self.crystal_structure = None
+        super().__init__(cij_dict,
+                         symmetry=symmetry,
+                         angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
 
         self.mass       = mass # mass of the sample
-        self.rho        = mass / np.prod(dimensions)
-        self.dimensions = dimensions
+        self.density    = mass / np.prod(dimensions)
+        self.dimensions = dimensions # in meters
 
         self.order      = order # order of the highest polynomial used to calculate the resonacne frequencies
         self.N          = int((order+1)*(order+2)*(order+3)/6) # this is the number of basis functions
 
         self.cij_dict = deepcopy(cij_dict)
-        self.nb_freq = nb_freq
+        self._nb_freq = nb_freq
+        self.freqs    = None
 
         self.basis  = np.zeros((self.N, 3))
         self.idx    =  0
@@ -36,12 +42,26 @@ class RUSRPR:
         if init == True:
             self.initialize()
 
+    ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    def _get_nb_freq(self):
+        return self._nb_freq
+    def _set_nb_freq(self, nb_freq):
+        self._nb_freq = nb_freq
+    nb_freq = property(_get_nb_freq, _set_nb_freq)
 
+    ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def initialize(self):
         # create basis and sort it based on its parity;
         # for details see Arkady's paper;
         # this is done here in __init__ because we only need to is once and it is the "long" part of the calculation
-        lookUp = {(1, 1, 1) : 0, (1, 1, -1) : 1, (1, -1, 1) : 2, (-1, 1, 1) : 3, (1, -1, -1): 4, (-1, 1, -1) : 5, (-1, -1, 1) : 6, (-1, -1, -1) : 7}
+        lookUp = {(1, 1, 1) : 0,
+                   (1, 1, -1) : 1,
+                    (1, -1, 1) : 2,
+                     (-1, 1, 1) : 3,
+                      (1, -1, -1): 4,
+                       (-1, 1, -1) : 5,
+                        (-1, -1, 1) : 6,
+                         (-1, -1, -1) : 7}
         for k in range(self.order+1):
             for l in range(self.order+1):
                 for m in range(self.order+1):
@@ -53,75 +73,11 @@ class RUSRPR:
         self.Emat = self.E_mat()
         self.Itens = self.I_tens()
 
-
-    def elastic_tensor(self):
-        """
-        returns the elastic tensor from given elastic constants in cij_dict
-        (a dictionary of elastic constants)
-        based on the length of cij_dict it decides what crystal structure we the sample has
-        """
-        ctens = np.zeros([3,3,3,3])
-
-        if len(self.cij_dict) == 3:                      # cubic
-            self.crystal_structure = 'cubic'
-            c11 = c22 = c33 = self.cij_dict['c11']
-            c12 = c13 = c23 = self.cij_dict['c12']
-            c44 = c55 = c66 = self.cij_dict['c44']
-
-        elif len(self.cij_dict) == 5:                    # hexagonal
-            self.crystal_structure = 'hexagonal'
-            indicator = np.any( np.array([i=='c11' for i in self.cij_dict]) )
-            if indicator == True:
-                c11 = c22       = self.cij_dict['c11']
-                c33             = self.cij_dict['c33']
-                c12             = self.cij_dict['c12']
-                c13 = c23       = self.cij_dict['c13']
-                c44 = c55       = self.cij_dict['c44']
-                c66             = (self.cij_dict['c11']-self.cij_dict['c12'])/2
-            else:
-                c11 = c22       = 2*self.cij_dict['c66'] + self.cij_dict['c12']
-                c33             = self.cij_dict['c33']
-                c12             = self.cij_dict['c12']
-                c13 = c23       = self.cij_dict['c13']
-                c44 = c55       = self.cij_dict['c44']
-                c66             = self.cij_dict['c66']
-
-        elif len(self.cij_dict) == 6:                    # tetragonal
-            self.crystal_structure = 'tetragonal'
-            c11 = c22       = self.cij_dict['c11']
-            c33             = self.cij_dict['c33']
-            c12             = self.cij_dict['c12']
-            c13 = c23       = self.cij_dict['c13']
-            c44 = c55       = self.cij_dict['c44']
-            c66             = self.cij_dict['c66']
-
-        elif len(self.cij_dict) == 9:                    # orthorhombic
-            self.crystal_structure = 'orthorhombic'
-            c11             = self.cij_dict['c11']
-            c22             = self.cij_dict['c22']
-            c33             = self.cij_dict['c33']
-            c12             = self.cij_dict['c12']
-            c13             = self.cij_dict['c13']
-            c23             = self.cij_dict['c23']
-            c44             = self.cij_dict['c44']
-            c55             = self.cij_dict['c55']
-            c66             = self.cij_dict['c66']
-
-        else:
-            print ('You have not given a valid Crystal Structure')
-
-        ctens[0,0,0,0] = c11
-        ctens[1,1,1,1] = c22
-        ctens[2,2,2,2] = c33
-        ctens[0,0,1,1] = ctens[1,1,0,0] = c12
-        ctens[2,2,0,0] = ctens[0,0,2,2] = c13
-        ctens[1,1,2,2] = ctens[2,2,1,1] = c23
-        ctens[0,1,0,1] = ctens[1,0,0,1] = ctens[0,1,1,0] = ctens[1,0,1,0] = c66
-        ctens[0,2,0,2] = ctens[2,0,0,2] = ctens[0,2,2,0] = ctens[2,0,2,0] = c55
-        ctens[1,2,1,2] = ctens[2,1,2,1] = ctens[2,1,1,2] = ctens[1,2,2,1] = c44
-
-        return ctens
-
+    def copy_object(self, rpr_object):
+        self.block = rpr_object.block
+        self.idx   = rpr_object.idx
+        self.Emat  = rpr_object.Emat
+        self.Itens = rpr_object.Itens
 
     def E_int(self, i, j):
         """
@@ -153,7 +109,7 @@ class RUSRPR:
             i, k = int(x/self.idx), x%self.idx
             for y in range(x, 3*self.idx):
                 j, l = int(y/self.idx), y%self.idx
-                if i==j: Etens[i,k,j,l]=Etens[j,l,i,k]=self.E_int(k,l)*self.rho
+                if i==j: Etens[i,k,j,l]=Etens[j,l,i,k]=self.E_int(k,l)*self.density
         Emat = Etens.reshape(3*self.idx,3*self.idx)
         return Emat
 
@@ -179,8 +135,7 @@ class RUSRPR:
         this is a separate step because I_tens is independent of elastic constants, but only dependent on geometry;
         it is also the slow part of the calculation but only has to be done once this way
         """
-        C = self.elastic_tensor()
-        Gtens = np.tensordot(C, self.Itens, axes= ([1,3],[0,2]))
+        Gtens = np.tensordot(self.cijkl*1e9, self.Itens, axes= ([1,3],[0,2]))
         Gmat = np.swapaxes(Gtens, 2, 1).reshape(3*self.idx, 3*self.idx)
         return Gmat
 
@@ -197,13 +152,13 @@ class RUSRPR:
             w = np.array([])
             for ii in range(8):
                 w = np.concatenate((w, linalg.eigh(Gmat[np.ix_(self.block[ii], self.block[ii])], self.Emat[np.ix_(self.block[ii], self.block[ii])], eigvals_only=True)))
-            f = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) # resonance frequencies in Hz
-            return f
+            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            return self.freqs
         else:
             w, a = linalg.eigh(Gmat, self.Emat)
             a = a.transpose()[np.argsort(w)][6:self.nb_freq+6]
-            f = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi)
-            return f, a
+            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            return self.freqs, a
 
 
 if __name__ == "__main__":
@@ -224,7 +179,7 @@ if __name__ == "__main__":
                 "c66": 95e9,
                 }
 
-    rus = RUSRPR(cij_dict, mass, dimensions, order, nb_freq)
+    rus = RUSRPR(cij_dict, "tetragonal", mass, dimensions, order, nb_freq)
     t0 = time.time()
     print ('initialize the class ...')
     rus.initialize()

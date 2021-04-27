@@ -7,6 +7,7 @@ import sys
 import ray
 from psutil import cpu_count
 from rus_comsol.rus_comsol import RUSComsol
+from rus_comsol.rus_rpr import RUSRPR
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 class RUSFitting:
@@ -15,6 +16,7 @@ class RUSFitting:
                  nb_freqs,
                  nb_max_missing=0,
                  nb_workers=4,
+                 report_name="",
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
                  polish=False, updating='deferred', tolerance=0.01):
         self.rus_object  = rus_object
@@ -59,6 +61,8 @@ class RUSFitting:
         self.polish       = polish
         self.updating     = updating
         self.tolerance    = tolerance
+
+        self.report_name = report_name
 
         ## Empty spaces
         self.best_chi2 = None
@@ -146,16 +150,32 @@ class RUSFitting:
 
 
     def generate_workers(self):
+        if isinstance(self.rus_object, RUSRPR):
+            self.rus_object.initialize()
         for _ in range(self._nb_workers):
-            worker = ray.remote(RUSComsol).remote(cij_dict=self.rus_object.cij_dict,
-                                    symmetry=self.rus_object.symmetry,
-                                    mph_file=self.rus_object.mph_file,
-                                    nb_freq=self.nb_freqs+self.nb_max_missing,
-                                    angle_x=self.rus_object.angle_x,
-                                    angle_y=self.rus_object.angle_y,
-                                    angle_z=self.rus_object.angle_z,
-                                    study_name=self.rus_object.study_name,
-                                    init=True)
+            if isinstance(self.rus_object, RUSComsol):
+                worker = ray.remote(RUSComsol).remote(cij_dict=self.rus_object.cij_dict,
+                                        symmetry=self.rus_object.symmetry,
+                                        mph_file=self.rus_object.mph_file,
+                                        nb_freq=self.nb_freqs+self.nb_max_missing,
+                                        angle_x=self.rus_object.angle_x,
+                                        angle_y=self.rus_object.angle_y,
+                                        angle_z=self.rus_object.angle_z,
+                                        study_name=self.rus_object.study_name,
+                                        init=True)
+
+            if isinstance(self.rus_object, RUSRPR):
+                worker = ray.remote(RUSRPR).remote(cij_dict=self.rus_object.cij_dict,
+                                        symmetry=self.rus_object.symmetry,
+                                        mass=self.rus_object.mass,
+                                        dimensions=self.rus_object.dimensions,
+                                        order=self.rus_object.order,
+                                        nb_freq=self.nb_freqs+self.nb_max_missing,
+                                        angle_x=self.rus_object.angle_x,
+                                        angle_y=self.rus_object.angle_y,
+                                        angle_z=self.rus_object.angle_z,
+                                        init=False)
+                worker.copy_object.remote(self.rus_object)
             self.workers.append(worker)
         self.pool = ray.util.ActorPool(self.workers)
 
@@ -173,12 +193,13 @@ class RUSFitting:
                 worker._set_angle_y.remote(value[i])
             elif free_name=="angle_z":
                 worker._set_angle_z.remote(value[i])
-        return worker.compute_freqs.remote()
+        return worker.compute_resonances.remote()
 
 
     def close_workers(self):
-        for worker in self.workers:
-            worker.stop_comsol.remote()
+        if isinstance(self.rus_object, RUSComsol):
+            for worker in self.workers:
+                worker.stop_comsol.remote()
 
 
     def map(self, func, iterable):
@@ -281,8 +302,9 @@ class RUSFitting:
 
         print(report)
 
-
-        report_file = open(self.rus_object.mph_file[:-4] + "_fit_report.txt", "w")
+        if self.report_name == "":
+            self.report_name = "fit_report.txt"
+        report_file = open(self.report_name, "w")
         report_file.write(report)
         report_file.close()
 

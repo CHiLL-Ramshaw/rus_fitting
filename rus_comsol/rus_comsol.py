@@ -1,6 +1,4 @@
-from rus_comsol.elastic_constants import ElasticConstants
 import mph
-from copy import deepcopy
 from rus_comsol.elastic_constants import ElasticConstants
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -33,7 +31,7 @@ class RUSComsol(ElasticConstants):
     nb_freq = property(_get_nb_freq, _set_nb_freq)
 
 
-    def compute_freqs(self):
+    def compute_resonances(self):
         ## Set number of frequencies --------------------------------------------
         self.model.parameter('nb_freq', str(self._nb_freq + 6))
         ## Set parameters  ------------------------------------------------------
