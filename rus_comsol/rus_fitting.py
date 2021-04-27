@@ -10,38 +10,37 @@ from rus_comsol.rus_comsol import RUSComsol
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 class RUSFitting:
-    def __init__(self, rus_object, ranges,
+    def __init__(self, rus_object, bounds_dict,
                  freqs_file,
-                 nb_freqs, nb_max_missing,
+                 nb_freqs,
+                 nb_max_missing=0,
                  nb_workers=4,
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
                  polish=False, updating='deferred', tolerance=0.01):
-        self.rus_object = rus_object
-        self.init_pars  = deepcopy(self.rus_object.pars)
-        self.best_pars  = deepcopy(self.rus_object.pars)
-        self.last_gen   = None
-        self.ranges     = ranges
-
-        # try:
-        #     assert nb_freqs + nb_max_missing > self.freqs_data.size
-        # except AssertionError:
-        #     print("You need --- nb_freqs <= nb of data resonances")
-        #     sys.exit(1)
+        self.rus_object  = rus_object
+        self.init_pars   = deepcopy(self.rus_object.cij_dict)
+        self.init_pars["angle_x"] = self.rus_object.angle_x
+        self.init_pars["angle_y"] = self.rus_object.angle_y
+        self.init_pars["angle_z"] = self.rus_object.angle_z
+        self.best_pars   = deepcopy(self.init_pars)
+        self.last_gen    = None
+        self.bounds_dict = bounds_dict
 
         ## Load data
-        self.nb_freqs         = nb_freqs
-        self.nb_max_missing   = nb_max_missing
-        self.freqs_file       = freqs_file
-        self.col_freqs        = 0
-        self.freqs_data       = self.load_data()
-        self.freepars_name    = sorted(self.ranges.keys())
-        self.fixedpars_name   = np.setdiff1d(sorted(self.init_pars.keys()), self.freepars_name)
+        self.nb_freqs       = nb_freqs
+        self.nb_max_missing = nb_max_missing
+        self.freqs_file     = freqs_file
+        self.col_freqs      = 0
+        self.freqs_data     = self.load_data()
+        self.free_pars_name  = sorted(self.bounds_dict.keys())
+        self.fixed_pars_name = np.setdiff1d(sorted(self.init_pars.keys()),
+                                             self.free_pars_name)
 
-        ## Create list of bounds
+        ## Create tuple of bounds for scipy
         self.bounds  = []
-        for free_name in self.freepars_name:
-            self.bounds.append((self.ranges[free_name][0],
-                                         self.ranges[free_name][-1]))
+        for free_name in self.free_pars_name:
+            self.bounds.append((self.bounds_dict[free_name][0],
+                                self.bounds_dict[free_name][1]))
         self.bounds = tuple(self.bounds)
 
         ## Differential evolution
@@ -62,8 +61,9 @@ class RUSFitting:
         self.tolerance    = tolerance
 
         ## Empty spaces
-        self.best_chi2  = None
-        self.nb_gens    = 0
+        self.best_chi2 = None
+        self.nb_gens   = 0
+
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def _get_nb_workers(self):
@@ -77,6 +77,7 @@ class RUSFitting:
         self._nb_workers = nb_workers
     nb_workers = property(_get_nb_workers, _set_nb_workers)
 
+
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def load_data(self):
         """
@@ -87,6 +88,11 @@ class RUSFitting:
         if freqs_data.size is tuple:
             freqs_data = freqs_data[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
+        try:
+            assert self.nb_freqs <= freqs_data.size
+        except AssertionError:
+            print("You need --- nb calculated freqs <= nb data freqs")
+            sys.exit(1)
         return freqs_data[:self.nb_freqs]
 
 
@@ -104,7 +110,8 @@ class RUSFitting:
     def sort_freqs(self, freqs_sim_calc):
         if self.nb_max_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
-            index_sim, freqs_sim = self.assignement(self.freqs_data, freqs_sim_calc)
+            index_sim, freqs_sim = self.assignement(self.freqs_data,
+                                                    freqs_sim_calc)
             ## Give the missing frequencies in the data -------------------------
             # Let's remove the extra simulated frequencies that are beyond
             # the list of data frequencies
@@ -132,17 +139,21 @@ class RUSFitting:
         index_best = np.argmin(chi2)
         if self.best_chi2 == None or self.best_chi2 > chi2[index_best]:
             self.best_chi2 = chi2[index_best]
-            for i, free_name in enumerate(self.freepars_name):
-                self.best_pars[free_name][0] = self.last_gen[index_best][i]
+            for i, free_name in enumerate(self.free_pars_name):
+                self.best_pars[free_name] = self.last_gen[index_best][i]
             self.best_freqs_missing = freqs_missing_list[index_best]
         return chi2
 
 
     def generate_workers(self):
         for _ in range(self._nb_workers):
-            worker = ray.remote(RUSComsol).remote(pars=self.init_pars,
+            worker = ray.remote(RUSComsol).remote(cij_dict=self.rus_object.cij_dict,
+                                    symmetry=self.rus_object.symmetry,
                                     mph_file=self.rus_object.mph_file,
                                     nb_freq=self.nb_freqs+self.nb_max_missing,
+                                    angle_x=self.rus_object.angle_x,
+                                    angle_y=self.rus_object.angle_y,
+                                    angle_z=self.rus_object.angle_z,
                                     study_name=self.rus_object.study_name,
                                     init=True)
             self.workers.append(worker)
@@ -150,11 +161,19 @@ class RUSFitting:
 
 
     def update_worker(self, worker, value):
-        ## Update pars with fit parameters
-        pars = deepcopy(self.init_pars)
-        for i, free_name in enumerate(self.freepars_name):
-            pars[free_name][0] = value[i]
-        return worker.compute_freqs.remote(pars) #, worker._get_pars.remote()
+        ## Update cij with fit parameters
+        for i, free_name in enumerate(self.free_pars_name):
+            if free_name not in ["angle_x", "angle_y", "angle_z"]:
+                worker.set_cij_value.remote(free_name, value[i])
+        ## Update angles
+        for i, free_name in enumerate(self.free_pars_name):
+            if   free_name=="angle_x":
+                worker._set_angle_x.remote(value[i])
+            elif free_name=="angle_y":
+                worker._set_angle_y.remote(value[i])
+            elif free_name=="angle_z":
+                worker._set_angle_z.remote(value[i])
+        return worker.compute_freqs.remote()
 
 
     def close_workers(self):
@@ -175,16 +194,16 @@ class RUSFitting:
         ## Print End Generation
         print("Gen "
               + str(self.nb_gens) + ":: Pop "
-              + str(self.population * len(self.freepars_name))
+              + str(self.population * len(self.free_pars_name))
               + " :: %.6s s" % (time.time() - start_total_time))
         self.nb_gens += 1
         ## Print Best member of the population
-        for free_name in self.freepars_name:
+        for free_name in self.free_pars_name:
             print(free_name
                   + " : "
-                  + r"{0:.3f}".format(self.best_pars[free_name][0])
+                  + r"{0:.3f}".format(self.best_pars[free_name])
                   + " "
-                  + self.best_pars[free_name][1])
+                  + " ")
         print("Missing frequencies --- ", self.best_freqs_missing, " MHz\n")
         return chi2
 
@@ -222,9 +241,9 @@ class RUSFitting:
                                     )
 
         ## Export final parameters from the fit
-        for i, free_name in enumerate(self.freepars_name):
-            self.best_pars[free_name][0] = out.x[i]
-            self.rus_object.pars[free_name][0] = out.x[i]
+        for i, free_name in enumerate(self.free_pars_name):
+            self.best_pars[free_name] = out.x[i]
+            self.rus_object.cij_dict[free_name] = out.x[i]
 
         ## Fit report
         duration    = np.round(time.time() - t0, 2)
@@ -236,7 +255,7 @@ class RUSFitting:
         print("\n")
         report = "#[[Fit Statistics]]" + "\n"
         report+= "\t# fit success        \t= " + str(out.success) + "\n"
-        report+= "\t# fitting method     \t= " + "differential evolutin" + "\n"
+        report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
         report+= "\t# generations        \t= " + str(out.nit) + " + 1" + "\n"
         report+= "\t# function evals     \t= " + str(out.nfev) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
@@ -245,16 +264,16 @@ class RUSFitting:
         report+= "\t# chi-square         \t= " + r"{0:.8f}".format(chi2) + "\n"
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
         report+= "#[[Variables]]" + "\n"
-        for i, free_name in enumerate(self.freepars_name):
+        for i, free_name in enumerate(self.free_pars_name):
             report+= "\t# " + free_name + " : " + r"{0:.3f}".format(out.x[i]) + " " + \
-                     self.best_pars[free_name][1] + \
-                     " (init = [" + str(self.ranges[free_name][0]) + \
-                     ", " +         str(self.ranges[free_name][1]) + "])" + "\n"
+                     " unit " + \
+                     " (init = [" + str(self.bounds_dict[free_name]) + \
+                     ", " +         "unit" + "])" + "\n"
         report+= "#[[Fixed values]]" + "\n"
-        for fixedpars_name in self.fixedpars_name:
-            report+= "\t# " + fixedpars_name + " : " + \
-                     r"{0:.8f}".format(self.best_pars[fixedpars_name][0]) + " " + \
-                     self.best_pars[fixedpars_name][1] + "\n"
+        for fixed_pars_name in self.fixed_pars_name:
+            report+= "\t# " + fixed_pars_name + " : " + \
+                     r"{0:.8f}".format(self.best_pars[fixed_pars_name]) + " " + \
+                     " unit " + "\n"
 
         report += "#[[Missing frequencies]]\n"
         for freqs_missing in self.best_freqs_missing:

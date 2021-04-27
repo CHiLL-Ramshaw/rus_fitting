@@ -20,7 +20,8 @@ class ElasticConstants:
         self.voigt_matrix = self.cij_dict_to_voigt_matrix()
         self.R = self.rotation_matrix()
         self.rotation_voigt()
-        self.voigt_dict   = self.voigt_matrix_to_voigt_dict()
+        self.voigt_dict = self.voigt_matrix_to_voigt_dict()
+        self.cijkl = self.voigt_matrix_to_tensor()
 
 
     ## Special Method >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>#
@@ -30,9 +31,7 @@ class ElasticConstants:
             print(key + " was not added (new band parameters are only allowed within object initialization)")
         else:
             self._cij_dict[key] = value
-            self.cij_dict_to_voigt_matrix()
-            self.rotation_voigt()
-            self.voigt_matrix_to_voigt_dict()
+            self._update()
 
     def __getitem__(self, key):
         try:
@@ -54,43 +53,40 @@ class ElasticConstants:
         return self._cij_dict
     def _set_cij_dict(self, cij_dict):
         self._cij_dict = deepcopy(cij_dict)
-        self.cij_dict_to_voigt_matrix()
-        self.rotation_voigt()
-        self.voigt_matrix_to_voigt_dict()
+        self._update()
     cij_dict = property(_get_cij_dict, _set_cij_dict)
 
     def _get_angle_x(self):
         return self._angle_x
     def _set_angle_x(self, angle_x):
         self._angle_x = angle_x
-        self.rotation_matrix()
-        self.cij_dict_to_voigt_matrix()
-        self.rotation_voigt()
-        self.voigt_matrix_to_voigt_dict()
+        self._update()
     angle_x = property(_get_angle_x, _set_angle_x)
 
     def _get_angle_y(self):
         return self._angle_y
     def _set_angle_y(self, angle_y):
         self._angle_y = angle_y
-        self.rotation_matrix()
-        self.cij_dict_to_voigt_matrix()
-        self.rotation_voigt()
-        self.voigt_matrix_to_voigt_dict()
+        self._update()
     angle_y = property(_get_angle_y, _set_angle_y)
 
     def _get_angle_z(self):
         return self._angle_z
     def _set_angle_z(self, angle_z):
         self._angle_z = angle_z
-        self.rotation_matrix()
-        self.cij_dict_to_voigt_matrix()
-        self.rotation_voigt()
-        self.voigt_matrix_to_voigt_dict()
+        self._update()
     angle_z = property(_get_angle_z, _set_angle_z)
 
 
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    def _update(self):
+        self.rotation_matrix()
+        self.cij_dict_to_voigt_matrix()
+        self.rotation_voigt()
+        self.voigt_matrix_to_voigt_dict()
+        self.voigt_matrix_to_tensor()
+
+
     def cij_dict_to_voigt_matrix(self):
         """
         returns the elastic tensor from given elastic constants in pars
@@ -221,71 +217,27 @@ class ElasticConstants:
         return self.voigt_matrix
 
 
+    def voigt_matrix_to_tensor(self):
+        """
+        returns the elastic tensor from given elastic constants in pars
+        (a dictionary of elastic constants)
+        based on the length of pars it decides what crystal structure we the sample has
+        """
+        cijkl = np.zeros([3,3,3,3])
+        voigt_matrix = self.voigt_matrix
 
+        cijkl[0,0,0,0] = voigt_matrix[0,0]
+        cijkl[1,1,1,1] = voigt_matrix[1,1]
+        cijkl[2,2,2,2] = voigt_matrix[2,2]
+        cijkl[0,0,1,1] = cijkl[1,1,0,0] = voigt_matrix[0,1]
+        cijkl[2,2,0,0] = cijkl[0,0,2,2] = voigt_matrix[0,2]
+        cijkl[1,1,2,2] = cijkl[2,2,1,1] = voigt_matrix[1,2]
+        cijkl[0,1,0,1] = cijkl[1,0,0,1] = cijkl[0,1,1,0] = cijkl[1,0,1,0] = voigt_matrix[5,5]
+        cijkl[0,2,0,2] = cijkl[2,0,0,2] = cijkl[0,2,2,0] = cijkl[2,0,2,0] = voigt_matrix[4,4]
+        cijkl[1,2,1,2] = cijkl[2,1,2,1] = cijkl[2,1,1,2] = cijkl[1,2,2,1] = voigt_matrix[3,3]
 
-# def elastic_tensor(pars):
-#     """
-#     returns the elastic tensor from given elastic constants in pars
-#     (a dictionary of elastic constants)
-#     based on the length of pars it decides what crystal structure we the sample has
-#     """
-#     ctens = np.zeros([3,3,3,3])
-
-#     if len(pars) == 3:                      # cubic
-#         c11 = c22 = c33 = pars['c11']
-#         c12 = c13 = c23 = pars['c12']
-#         c44 = c55 = c66 = pars['c44']
-
-#     elif len(pars) == 5:                    # hexagonal
-#         indicator = np.any( np.array([i=='c11' for i in pars]) )
-#         if indicator == True:
-#             c11 = c22       = pars['c11']
-#             c33             = pars['c33']
-#             c12             = pars['c12']
-#             c13 = c23       = pars['c13']
-#             c44 = c55       = pars['c44']
-#             c66             = (pars['c11']-pars['c12'])/2
-#         else:
-#             c11 = c22       = 2*pars['c66'] + pars['c12']
-#             c33             = pars['c33']
-#             c12             = pars['c12']
-#             c13 = c23       = pars['c13']
-#             c44 = c55       = pars['c44']
-#             c66             = pars['c66']
-
-#     elif len(pars) == 6:                    # tetragonal
-#         c11 = c22       = pars['c11']
-#         c33             = pars['c33']
-#         c12             = pars['c12']
-#         c13 = c23       = pars['c13']
-#         c44 = c55       = pars['c44']
-#         c66             = pars['c66']
-
-#     elif len(pars) == 9:                    # orthorhombic
-#         c11             = pars['c11']
-#         c22             = pars['c22']
-#         c33             = pars['c33']
-#         c12             = pars['c12']
-#         c13             = pars['c13']
-#         c23             = pars['c23']
-#         c44             = pars['c44']
-#         c55             = pars['c55']
-#         c66             = pars['c66']
-
-#     else:
-#         print ('You have not given a valid Crystal Structure')
-
-#     ctens[0,0,0,0] = c11
-#     ctens[1,1,1,1] = c22
-#     ctens[2,2,2,2] = c33
-#     ctens[0,0,1,1] = ctens[1,1,0,0] = c12
-#     ctens[2,2,0,0] = ctens[0,0,2,2] = c13
-#     ctens[1,1,2,2] = ctens[2,2,1,1] = c23
-#     ctens[0,1,0,1] = ctens[1,0,0,1] = ctens[0,1,1,0] = ctens[1,0,1,0] = c66
-#     ctens[0,2,0,2] = ctens[2,0,0,2] = ctens[0,2,2,0] = ctens[2,0,2,0] = c55
-#     ctens[1,2,1,2] = ctens[2,1,2,1] = ctens[2,1,1,2] = ctens[1,2,2,1] = c44
-
-#     return ctens
+        self.cijkl = cijkl
+        return cijkl
 
 
 # def to_Voigt(ctens):
@@ -348,6 +300,5 @@ if __name__=="__main__":
     print(np.round(e1.voigt_matrix, 0))
     for key in sorted(e1.voigt_dict.keys()):
         print(key, e1.voigt_dict[key])
-
 
 
