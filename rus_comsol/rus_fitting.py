@@ -51,16 +51,17 @@ class RUSFitting:
             print("!! Changed #workers to "
                   + str(nb_workers)
                   + " the #max of available cores !!")
-        self._nb_workers  = nb_workers
-        self.workers      = []
-        self.pool         = None
-        self.population   = population # (popsize = population * len(x))
-        self.N_generation = N_generation
-        self.mutation     = mutation
-        self.crossing     = crossing
-        self.polish       = polish
-        self.updating     = updating
-        self.tolerance    = tolerance
+        self._nb_workers   = nb_workers
+        self.workers       = []
+        self.pool          = None
+        self.ray_init_auto = True
+        self.population    = population # (popsize = population * len(x))
+        self.N_generation  = N_generation
+        self.mutation      = mutation
+        self.crossing      = crossing
+        self.polish        = polish
+        self.updating      = updating
+        self.tolerance     = tolerance
 
         self.report_name = report_name
 
@@ -150,8 +151,8 @@ class RUSFitting:
 
 
     def generate_workers(self):
-        if isinstance(self.rus_object, RUSRPR):
-            self.rus_object.initialize()
+        # if isinstance(self.rus_object, RUSRPR):
+        #     self.rus_object.initialize()
         for _ in range(self._nb_workers):
             if isinstance(self.rus_object, RUSComsol):
                 worker = ray.remote(RUSComsol).remote(cij_dict=self.rus_object.cij_dict,
@@ -235,11 +236,18 @@ class RUSFitting:
         return chi2[0]
 
 
-    def run_fit(self):
-        ## Start Ray
-        ray.init(num_cpus=cpu_count(logical=False),
+    def ray_init(self, num_cpus=None):
+        if num_cpus==None:
+            num_cpus = cpu_count(logical=False)
+        ray.init(num_cpus=num_cpus,
                  include_dashboard=False,
                  log_to_driver=False)
+
+
+    def run_fit(self):
+        ## Start Ray
+        if self.ray_init_auto == True:
+            self.ray_init()
 
         self.generate_workers()
         print("--- Pool of "

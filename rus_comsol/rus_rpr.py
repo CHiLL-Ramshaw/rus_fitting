@@ -54,6 +54,11 @@ class RUSRPR(ElasticConstants):
         # create basis and sort it based on its parity;
         # for details see Arkady's paper;
         # this is done here in __init__ because we only need to is once and it is the "long" part of the calculation
+        self.idx    =  0
+        self.block  = [[],[],[],[],[],[],[],[]]
+        self.Emat  = None
+        self.Itens = None
+
         lookUp = {(1, 1, 1) : 0,
                    (1, 1, -1) : 1,
                     (1, -1, 1) : 2,
