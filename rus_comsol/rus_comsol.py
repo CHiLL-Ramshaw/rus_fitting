@@ -67,7 +67,7 @@ class RUSComsol(ElasticConstants):
 
 
 
-   def log_derivatives_numerical (self, cij_dict=None, dc=1e-4, N=5, Rsquared_threshold=1e-5, nb_freq=None, return_freqs=False):
+    def log_derivatives_numerical (self, cij_dict=None, dc=1e-4, N=5, Rsquared_threshold=1e-5, nb_freq=None, return_freqs=False):
         """
         calculating logarithmic derivatives of the resonance frequencies with respect to elastic constants,
         i.e. (df/dc)*(c/f);

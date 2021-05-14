@@ -99,9 +99,9 @@ class RUSFitting:
             freqs_data = freqs_data[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
         if nb_freq == 'all':
-            nb_freq = len(freqs_data)
+            self.nb_freqs = nb_freq = len(freqs_data)
         try:
-            assert self.nb_freqs <= freqs_data.size
+            assert nb_freq <= freqs_data.size
         except AssertionError:
             print("You need --- nb calculated freqs <= nb data freqs")
             sys.exit(1)
@@ -425,5 +425,7 @@ class RUSFitting:
         report = self.print_fit_report(out, fit_start_time=t0)
         self.save_report(report)
         print (report)
+        logder = self.print_logarithmic_derivative()
+        print(logder)
 
         return self.rus_object
