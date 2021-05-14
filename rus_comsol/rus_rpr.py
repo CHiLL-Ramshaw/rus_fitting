@@ -23,8 +23,8 @@ class RUSRPR(ElasticConstants):
                          angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
 
         self.mass       = mass # mass of the sample
-        self.density    = mass / np.prod(dimensions)
-        self.dimensions = dimensions # in meters
+        self.density    = mass / np.prod(np.array(dimensions))
+        self.dimensions = np.array(dimensions) # in meters
 
         self.order      = order # order of the highest polynomial used to calculate the resonacne frequencies
         self.N          = int((order+1)*(order+2)*(order+3)/6) # this is the number of basis functions
@@ -134,36 +134,83 @@ class RUSRPR(ElasticConstants):
         return Itens
 
 
-    def G_mat(self):
+    def G_mat(self, cijkl=None):
         """
         get potential energy matrix;
         this is a separate step because I_tens is independent of elastic constants, but only dependent on geometry;
         it is also the slow part of the calculation but only has to be done once this way
         """
-        Gtens = np.tensordot(self.cijkl*1e9, self.Itens, axes= ([1,3],[0,2]))
+        if cijkl is None:
+            cijkl = self.cijkl
+        Gtens = np.tensordot(cijkl*1e9, self.Itens, axes= ([1,3],[0,2]))
         Gmat = np.swapaxes(Gtens, 2, 1).reshape(3*self.idx, 3*self.idx)
         return Gmat
 
 
-    def compute_resonances(self, eigvals_only=True):
+
+    def compute_resonances(self, eigvals_only=True, nb_freq=None):
         """
         calculates resonance frequencies in Hz;
         pars: dictionary of elastic constants
         nb_freq: number of elastic constants to be displayed
         eigvals_only (True/False): gets only eigenvalues (i.e. resonance frequencies) or also gives eigenvectors (the latter is important when we want to calculate derivatives)
         """
+        if nb_freq==None:
+            nb_freq = self.nb_freq
         Gmat = self.G_mat()
         if eigvals_only==True:
             w = np.array([])
             for ii in range(8):
                 w = np.concatenate((w, linalg.eigh(Gmat[np.ix_(self.block[ii], self.block[ii])], self.Emat[np.ix_(self.block[ii], self.block[ii])], eigvals_only=True)))
-            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
             return self.freqs
         else:
             w, a = linalg.eigh(Gmat, self.Emat)
-            a = a.transpose()[np.argsort(w)][6:self.nb_freq+6]
-            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            a = a.transpose()[np.argsort(w)][6:nb_freq+6]
+            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
             return self.freqs, a
+
+
+
+
+    def log_derivatives_analytical(self, cij_dict=None, nb_freq=None, return_freqs=False):
+        """
+        calculating logarithmic derivatives of the resonance frequencies with respect to elastic constants,
+        i.e. (df/dc)*(c/f), following Arkady's paper
+        """
+        if cij_dict == None:
+            cij_dict = self.cij_dict
+        if nb_freq == None:
+            nb_freq = self.nb_freq
+
+        f, a = self.compute_resonances(eigvals_only=False, nb_freq=nb_freq)
+        derivative_matrix = np.zeros((nb_freq, len(cij_dict)))
+        ii = 0
+
+        for direction in sorted(cij_dict):
+            value = cij_dict[direction]
+            Cderivative_dict = {key: 0 for key in cij_dict}
+            # Cderivative_dict = {'c11': 0,'c22': 0, 'c33': 0, 'c13': 0, 'c23': 0, 'c12': 0, 'c44': 0, 'c55': 0, 'c66': 0}
+            Cderivative_dict[direction] = 1
+
+            # voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=Cderivative_dict)
+            # R = self.rotation_matrix(angle_x=self.angle_x, angle_y=self.angle_y, angle_z=self.angle_y)
+            # voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
+            # cijkl = self.voigt_matrix_to_tensor(voigt_matrix=voigt_matrix_R)
+            cijkl = self.cij_dict_to_tensor(angle_x=self.angle_x, angle_y=self.angle_y, angle_z=self.angle_z, cij_dict=Cderivative_dict)
+
+            Gmat_derivative = self.G_mat(cijkl)
+            for idx, res in enumerate(f):
+                derivative_matrix[idx, ii] = np.matmul(a[idx].T, np.matmul(Gmat_derivative, a[idx]) ) / (res**2) * value
+            ii += 1
+        log_derivative = np.zeros((nb_freq, len(cij_dict)))
+        for idx, der in enumerate(derivative_matrix):
+            log_derivative[idx] = der / sum(der)
+
+        if return_freqs == True:
+            return log_derivative, f
+        elif return_freqs == False:
+            return log_derivative
 
 
 if __name__ == "__main__":
@@ -192,48 +239,6 @@ if __name__ == "__main__":
     print(rus.compute_resonances()*1e-6)
 
 
-    # def log_derivatives_analytical(self, pars, nb_freq):
-    #     """
-    #     calculating logarithmic derivatives of the resonance frequencies with respect to elastic constants,
-    #     i.e. (df/dc)*(c/f), following Arkady's paper
-    #     """
-    #     f, a = self.compute_resonances(pars, nb_freq, eigvals_only=False)
-    #     derivative_matrix = np.zeros((nb_freq, len(pars)))
-    #     ii = 0
-
-
-    #     for direction in sorted(pars):
-    #         value = pars[direction]
-    #         Cderivative_dict = {key: 0 for key in pars}
-    #         # Cderivative_dict = {'c11': 0,'c22': 0, 'c33': 0, 'c13': 0, 'c23': 0, 'c12': 0, 'c44': 0, 'c55': 0, 'c66': 0}
-    #         Cderivative_dict[direction] = 1
-    #         Gmat_derivative = self.G_mat(Cderivative_dict)
-    #         for idx, res in enumerate(f):
-    #             derivative_matrix[idx, ii] = np.matmul(a[idx].T, np.matmul(Gmat_derivative, a[idx]) ) / (res**2) * value
-    #         ii += 1
-    #     log_derivative = np.zeros((nb_freq, len(pars)))
-    #     for idx, der in enumerate(derivative_matrix):
-    #         log_derivative[idx] = der / sum(der)
-
-
-    #     # print the logarithmic derivatives of each frequency
-    #     # formats = "{0:<15}{1:<15}"
-    #     # k = 2
-    #     # for _ in log_derivative[0]:
-    #     #     formats = formats + '{' + str(k) + ':<15}'
-    #     #     k+=1
-    #     # print ('-----------------------------------------------------------------------')
-    #     # print ('-----------------------------------------------------------------------')
-    #     # print ('2 x LOGARITHMIC DERIVATIVES')
-    #     # print ('-----------------------------------------------------------------------')
-    #     # print (formats.format('f [MHz]','dlnf/dlnc11','dlnf/dlnc12','dlnf/dlnc44','SUM') )
-    #     # for idx, line in enumerate(log_derivative):
-    #     #     text = [str(round(f[idx]/1e6,6))] + [str(round(d, 6)) for d in line] + [str(round(sum(line),7))]
-    #     #     print ( formats.format(*text) )
-    #     # print ('-----------------------------------------------------------------------')
-    #     # print ('-----------------------------------------------------------------------')
-
-    #     return log_derivative
 
 
 
