@@ -139,8 +139,8 @@ class RUSComsol(ElasticConstants):
                     # if these two fits differ by too much, just print the below line and plot that particular data
                     print ('not sure if data is a straight line for ', elastic_constant, ' at f = ', freq_result[idx], ' MHz')
                     plt.figure()
-                    plt.plot(c_derivative_array/1e3, freq_derivative_array, 'o')
-                    plt.plot(c_derivative_array/1e3, current_fit)
+                    plt.plot(c_derivative_array*1e3, freq_derivative_array*1e6, 'o')
+                    plt.plot(c_derivative_array, current_fit*1e6)
                     plt.title(elastic_constant +'; f = ' + str(round(freq_result[idx], 3)) + ' MHz; $R^2$ = ' + str(round(Rsquared, 7)))
                     plt.xlabel('$\\Delta c$ [kPa]')
                     plt.ylabel('$\\Delta f$ [Hz]')
