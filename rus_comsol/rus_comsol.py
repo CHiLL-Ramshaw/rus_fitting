@@ -137,11 +137,11 @@ class RUSComsol(ElasticConstants):
                 # R^2 = 1 would be perfect
                 if abs(1-Rsquared) > Rsquared_threshold:
                     # if these two fits differ by too much, just print the below line and plot that particular data
-                    print ('not sure if data is a straight line ', elastic_constant, ' ', freq_result[idx]/1e6, ' MHz')
+                    print ('not sure if data is a straight line for ', elastic_constant, ' at f = ', freq_result[idx], ' MHz')
                     plt.figure()
                     plt.plot(c_derivative_array/1e3, freq_derivative_array, 'o')
                     plt.plot(c_derivative_array/1e3, current_fit)
-                    plt.title(elastic_constant +'; f = ' + str(round(freq_result[idx]/1e6, 3)) + ' MHz; $R^2$ = ' + str(round(Rsquared, 7)))
+                    plt.title(elastic_constant +'; f = ' + str(round(freq_result[idx], 3)) + ' MHz; $R^2$ = ' + str(round(Rsquared, 7)))
                     plt.xlabel('$\\Delta c$ [kPa]')
                     plt.ylabel('$\\Delta f$ [Hz]')
                     plt.show()
