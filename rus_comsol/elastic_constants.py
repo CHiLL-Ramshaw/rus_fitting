@@ -87,13 +87,14 @@ class ElasticConstants:
         self.voigt_matrix_to_tensor()
 
 
-    def cij_dict_to_voigt_matrix(self):
+    def cij_dict_to_voigt_matrix(self, cij_dict=None):
         """
         returns the elastic tensor from given elastic constants in pars
         (a dictionary of elastic constants)
         based on the length of pars it decides what crystal structure we the sample has
         """
-        cij_dict = deepcopy(self.cij_dict)
+        if cij_dict is None:
+            cij_dict = deepcopy(self.cij_dict)
         voigt_matrix = np.zeros((6,6))
 
         if self.symmetry=="cubic":
@@ -120,46 +121,61 @@ class ElasticConstants:
             voigt_matrix[4,4] = cij_dict['c55']
             voigt_matrix[5,5] = cij_dict['c66']
 
-        # elif len(cij_dict) == 5:                    # hexagonal
-        #     indicator = np.any( np.array([i=='c11' for i in cij_dict]) )
-        #     if indicator == True:
-        #         c11 = c22       = cij_dict['c11']
-        #         c33             = cij_dict['c33']
-        #         c12             = cij_dict['c12']
-        #         c13 = c23       = cij_dict['c13']
-        #         c44 = c55       = cij_dict['c44']
-        #         c66             = (cij_dict['c11']-cij_dict['c12'])/2
-        #     else:
-        #         c11 = c22       = 2*cij_dict['c66'] + cij_dict['c12']
-        #         c33             = cij_dict['c33']
-        #         c12             = cij_dict['c12']
-        #         c13 = c23       = cij_dict['c13']
-        #         c44 = c55       = cij_dict['c44']
-        #         c66             = cij_dict['c66']
+        elif self.symmetry=="hexagonal":                    # hexagonal
+            indicator = np.any( np.array([i=='c11' for i in cij_dict]) )
+            if indicator == True:
+                voigt_matrix[0,0] = cij_dict['c11']
+                voigt_matrix[1,1] = cij_dict['c11']
+                voigt_matrix[2,2] = cij_dict['c33']
+                voigt_matrix[0,1] = cij_dict['c12']
+                voigt_matrix[0,2] = cij_dict['c13']
+                voigt_matrix[1,2] = cij_dict['c13']
+                voigt_matrix[3,3] = cij_dict['c44']
+                voigt_matrix[4,4] = cij_dict['c44']
+                voigt_matrix[5,5] = (cij_dict['c11']-cij_dict['c12'])/2
+            else:
+                voigt_matrix[0,0] = 2*cij_dict['c66'] + cij_dict['c12']
+                voigt_matrix[1,1] = cij_dict['c11']
+                voigt_matrix[2,2] = cij_dict['c33']
+                voigt_matrix[0,1] = cij_dict['c12']
+                voigt_matrix[0,2] = cij_dict['c13']
+                voigt_matrix[1,2] = cij_dict['c13']
+                voigt_matrix[3,3] = cij_dict['c44']
+                voigt_matrix[4,4] = cij_dict['c44']
+                voigt_matrix[5,5] = cij_dict['c66']
 
         self.voigt_matrix = (voigt_matrix + voigt_matrix.T
                              - np.diag(voigt_matrix.diagonal()))
         return self.voigt_matrix
 
 
-    def voigt_matrix_to_voigt_dict(self):
+    def voigt_matrix_to_voigt_dict(self, voigt_matrix=None):
         self.voigt_dict = {}
-        voigt_matrix = np.triu(self.voigt_matrix) # get only upper part of the matrix
+        # voigt_matrix = np.triu(self.voigt_matrix) # get only upper part of the matrix
+        if voigt_matrix is None:
+            voigt_matrix = self.voigt_matrix
         for i in range(6):
             for j in range(i, 6):
                 self.voigt_dict["c"+str(i+1)+str(j+1)] = voigt_matrix[i,j]
         return self.voigt_dict
 
 
-    def rotation_matrix(self):
+    def rotation_matrix(self, angle_x=None, angle_y=None, angle_z=None):
         """
         define general 3D rotation matrix with rotation angles angle_x, angle_y, angle_z about x, y, z
         axes respectively;
         angles are given in degrees
         """
-        angle_x = np.deg2rad(self.angle_x)
-        angle_y = np.deg2rad(self.angle_y)
-        angle_z = np.deg2rad(self.angle_z)
+        if angle_x is None:
+            angle_x = self.angle_x
+        if angle_y is None:
+            angle_y = self.angle_y
+        if angle_z is None:
+            angle_z = self.angle_z
+        angle_x = np.deg2rad(angle_x)
+        angle_y = np.deg2rad(angle_y)
+        angle_z = np.deg2rad(angle_z)
+        
         Rx = np.array([[1, 0, 0],
                     [0, cos(angle_x), -sin(angle_x)],
                     [0, sin(angle_x), cos(angle_x)]])
@@ -173,8 +189,9 @@ class ElasticConstants:
         return self.R
 
 
-    def rotation_voigt(self):
-        R = self.R
+    def rotation_voigt(self, R=None, voigt_matrix=None):
+        if R is None:
+            R = self.R
         M = np.array([
         [R[0,0]**2,
         R[0,1]**2,
@@ -213,18 +230,21 @@ class ElasticConstants:
         R[0,2]*R[1,0]+R[0,0]*R[1,2],
         R[0,0]*R[1,1]+R[0,1]*R[1,0]]
         ])
-        self.voigt_matrix = np.matmul(M, np.matmul(self.voigt_matrix, M.T))
+        if voigt_matrix is None:
+            voigt_matrix = self.voigt_matrix
+        self.voigt_matrix = np.matmul(M, np.matmul(voigt_matrix, M.T))
         return self.voigt_matrix
 
 
-    def voigt_matrix_to_tensor(self):
+    def voigt_matrix_to_tensor(self, voigt_matrix=None):
         """
         returns the elastic tensor from given elastic constants in pars
         (a dictionary of elastic constants)
         based on the length of pars it decides what crystal structure we the sample has
         """
         cijkl = np.zeros([3,3,3,3])
-        voigt_matrix = self.voigt_matrix
+        if voigt_matrix is None:
+            voigt_matrix = self.voigt_matrix
 
         cijkl[0,0,0,0] = voigt_matrix[0,0]
         cijkl[1,1,1,1] = voigt_matrix[1,1]
@@ -238,6 +258,45 @@ class ElasticConstants:
 
         self.cijkl = cijkl
         return cijkl
+
+
+    def cij_dict_to_tensor (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
+        if angle_x is None:
+            angle_x = self.angle_x
+        if angle_y is None:
+            angle_y = self.angle_y
+        if angle_z is None:
+            angle_z = self.angle_z
+        if cij_dict is None:
+            cij_dict = self.cij_dict
+
+        voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=cij_dict)
+        R = self.rotation_matrix(angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
+        voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
+        cijkl = self.voigt_matrix_to_tensor(voigt_matrix=voigt_matrix_R)
+
+        return cijkl
+
+
+    def cij_dict_to_voigt_dict (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
+        if angle_x is None:
+            angle_x = self.angle_x
+        if angle_y is None:
+            angle_y = self.angle_y
+        if angle_z is None:
+            angle_z = self.angle_z
+        if cij_dict is None:
+            cij_dict = self.cij_dict
+
+        voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=cij_dict)
+        R = self.rotation_matrix(angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
+        voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
+        voigt_dict = self.voigt_matrix_to_voigt_dict(voigt_matrix=voigt_matrix_R)
+
+        return voigt_dict
+
+
+
 
 
 # def to_Voigt(ctens):
