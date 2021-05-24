@@ -225,7 +225,7 @@ class RUSRPR(ElasticConstants):
             der_text = der_text + template.format(*text) + '\n'
 
         if print_frequencies == True:
-            freq_text = {}
+            freq_text = ''
             freq_template = "{0:<10}{1:<13}"
             freq_text += freq_template.format(*['idx', 'freq calc']) + '\n'
             freq_text += freq_template.format(*['', '(MHz)']) + '\n'

@@ -174,3 +174,45 @@ class RUSComsol(ElasticConstants):
             return (log_derivative_matrix, freq_result)
         else:
             return (log_derivative_matrix)#, fit_results_dict)
+
+
+
+
+    # def print_logarithmic_derivative (self, nb_additional_freqs=10, comsol_start=True):
+    #     print ('start taking derivatives ...')
+    #     if isinstance(self.rus_object, RUSComsol):
+    #         if comsol_start == True:
+    #             self.rus_object.start_comsol()
+    #             log_der, freqs_calc = self.rus_object.log_derivatives_numerical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
+    #             self.rus_object.stop_comsol()
+    #         else:
+    #             log_der, freqs_calc = self.rus_object.log_derivatives_numerical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
+    #     if isinstance(self.rus_object, RUSRPR):
+    #         if self.rus_object.Emat is None:
+    #             self.rus_object.initialize()
+    #         log_der, freqs_calc = self.rus_object.log_derivatives_analytical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
+
+    #     freq_text = self.print_best_frequencies (freqs_calc=freqs_calc, nb_additional_freqs=nb_additional_freqs, comsol_start=False)
+
+    #     cij = deepcopy(sorted(self.rus_object.cij_dict))
+    #     template = ""
+    #     for i, _ in enumerate(cij):
+    #         template += "{" + str(i) + ":<13}"
+    #     header = ['2 x logarithmic derivative (2 x dlnf / dlnc)']+(len(cij)-1)*['']
+    #     der_text = template.format(*header) + '\n'
+    #     der_text = der_text + template.format(*cij) + '\n'
+    #     der_text = der_text + '-'*13*len(cij) + '\n'
+    #     for ii in np.arange(len(freq_text.split('\n'))):
+    #         if ii < self.nb_freqs+len(self.best_freqs_missing):
+    #             text = [str(round(log_der[ii,j], 6)) for j in np.arange(len(cij))]
+    #             der_text = der_text + template.format(*text) + '\n'
+    #         else:
+    #             text = ['']*len(cij)
+    #             der_text = der_text + template.format(*text) + '\n'
+
+    #     total_text = ''
+    #     for ii in np.arange(len(freq_text.split('\n'))):
+    #         total_text = total_text + freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
+    #     # print(total_text)
+
+    #     return total_text

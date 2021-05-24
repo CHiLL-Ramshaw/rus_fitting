@@ -72,6 +72,10 @@ class RUSFitting:
         self.best_index_missing = []
         self.best_freqs_missing = []
 
+        ## empty spaces for fit properties
+        self.out = None
+        self.fit_duration = 0
+
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def _get_nb_workers(self):
@@ -255,14 +259,15 @@ class RUSFitting:
                  include_dashboard=False,
                  log_to_driver=False)
 
-    def print_fit_report(self, fit_out, fit_start_time=0):
-        duration    = np.round(time.time() - fit_start_time, 2)
+    def print_fit_report(self):
+        fit_out = self.out
+        duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
         N_variables = len(fit_out.x)
         chi2 = fit_out.fun
         reduced_chi2 = chi2 / (N_points - N_variables)
         # print("\n")
-        report = "\n#[[Fit Statistics]]" + "\n"
+        report = "#[[Fit Statistics]]" + "\n"
         report+= "\t# fit success        \t= " + str(fit_out.success) + "\n"
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
         report+= "\t# generations        \t= " + str(fit_out.nit) + " + 1" + "\n"
@@ -295,18 +300,20 @@ class RUSFitting:
     def print_best_frequencies (self, freqs_calc=None, nb_additional_freqs=10, comsol_start=True):
         freqs_data = np.array(self.load_data())
 
+        self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing + nb_additional_freqs
         if freqs_calc is None:
             if isinstance(self.rus_object, RUSComsol):
                 if comsol_start == True:
                     self.rus_object.start_comsol()
-                    freqs_calc = np.array(self.rus_object.compute_resonances(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs))
+                    freqs_calc = np.array(self.rus_object.compute_resonances())
                     self.rus_object.stop_comsol()
                 else:
-                    freqs_calc = np.array(self.rus_object.compute_resonances(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs))
+                    freqs_calc = np.array(self.rus_object.compute_resonances())
             if isinstance(self.rus_object, RUSRPR):
                 if self.rus_object.Emat is None:
                     self.rus_object.initialize()
-                freqs_calc = np.array(self.rus_object.compute_resonances(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs))
+                freqs_calc = np.array(self.rus_object.compute_resonances())
+        self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing
 
         index_missing = self.best_index_missing
         for idx in index_missing:
@@ -336,44 +343,35 @@ class RUSFitting:
         return (compare_text)
 
 
-    # def print_logarithmic_derivative (self, nb_additional_freqs=10, comsol_start=True):
-    #     print ('start taking derivatives ...')
-    #     if isinstance(self.rus_object, RUSComsol):
-    #         if comsol_start == True:
-    #             self.rus_object.start_comsol()
-    #             log_der, freqs_calc = self.rus_object.log_derivatives_numerical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
-    #             self.rus_object.stop_comsol()
-    #         else:
-    #             log_der, freqs_calc = self.rus_object.log_derivatives_numerical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
-    #     if isinstance(self.rus_object, RUSRPR):
-    #         if self.rus_object.Emat is None:
-    #             self.rus_object.initialize()
-    #         log_der, freqs_calc = self.rus_object.log_derivatives_analytical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
+    def print_final_output (self, comsol_start=True):
+        fit_report = self.print_fit_report()
+        freq_text  = self.print_best_frequencies(freqs_calc=None, nb_additional_freqs=10, comsol_start=comsol_start)
+        der_text   = self.rus_object.print_logarithmic_derivative (print_frequencies=False)
 
-    #     freq_text = self.print_best_frequencies (freqs_calc=freqs_calc, nb_additional_freqs=nb_additional_freqs, comsol_start=False)
+        sample_template = "{0:<40}{1:<20}"
+        sample_text = '[[Sample Characteristics]] \n'
+        sample_text += sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
+        if isinstance(self.rus_object, RUSRPR):
+            sample_text += sample_template.format(*['sample dimensions (mm) (x,y,z):', str(self.rus_object.dimensions*1e3)]) + '\n'
+            sample_text += sample_template.format(*['mass (mg):', self.rus_object.mass*1e6]) + '\n'
+            sample_text += sample_template.format(*['highest order basis polynomial:', self.rus_object.order]) + '\n'
+            sample_text += sample_template.format(*['resonance frequencies calculated with:', 'RUS_RPR']) + '\n'
+        if isinstance(self.rus_object, RUSComsol):
+            sample_text += sample_template.format(*['Comsol file:', self.rus_object.mph_file]) + '\n'
+            sample_text += sample_template.format(*['resonance frequencies calculated with:', 'Comsol']) + '\n'
 
-    #     cij = deepcopy(sorted(self.rus_object.cij_dict))
-    #     template = ""
-    #     for i, _ in enumerate(cij):
-    #         template += "{" + str(i) + ":<13}"
-    #     header = ['2 x logarithmic derivative (2 x dlnf / dlnc)']+(len(cij)-1)*['']
-    #     der_text = template.format(*header) + '\n'
-    #     der_text = der_text + template.format(*cij) + '\n'
-    #     der_text = der_text + '-'*13*len(cij) + '\n'
-    #     for ii in np.arange(len(freq_text.split('\n'))):
-    #         if ii < self.nb_freqs+len(self.best_freqs_missing):
-    #             text = [str(round(log_der[ii,j], 6)) for j in np.arange(len(cij))]
-    #             der_text = der_text + template.format(*text) + '\n'
-    #         else:
-    #             text = ['']*len(cij)
-    #             der_text = der_text + template.format(*text) + '\n'
+        data_text = ''
+        for ii in np.arange(len(freq_text.split('\n'))):
+            if ii < len(der_text.split('\n')):
+                data_text += freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
+            else:
+                data_text += freq_text.split('\n')[ii] + '\n'
 
-    #     total_text = ''
-    #     for ii in np.arange(len(freq_text.split('\n'))):
-    #         total_text = total_text + freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
-    #     # print(total_text)
+        vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+        final_output = vertical_spacing + sample_text + vertical_spacing + fit_report + vertical_spacing + data_text
 
-    #     return total_text
+        return final_output
+
 
 
 
@@ -385,7 +383,7 @@ class RUSFitting:
         report_file.close()
 
 
-    def run_fit(self):
+    def run_fit(self, print_derivatives=False):
         ## Start Ray
         if self.ray_init_auto == True:
             self.ray_init()
@@ -409,6 +407,8 @@ class RUSFitting:
                                     recombination=self.crossing,
                                     tol=self.tolerance
                                     )
+        self.out = out
+        self.fit_duration = time.time() - t0
 
         ## Export final parameters from the fit
         for i, free_name in enumerate(self.free_pars_name):
@@ -422,10 +422,17 @@ class RUSFitting:
         ray.shutdown()
 
         ## Fit report
-        report = self.print_fit_report(out, fit_start_time=t0)
+        if print_derivatives == False:
+            vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+            report = vertical_spacing
+            report += self.print_fit_report()
+            report += vertical_spacing
+            report += self.print_best_frequencies()
+            print (report)
+        else:
+            report = self.print_final_output()
+            print (report)
         self.save_report(report)
-        print (report)
-        logder = self.print_logarithmic_derivative()
-        print(logder)
+        
 
         return self.rus_object

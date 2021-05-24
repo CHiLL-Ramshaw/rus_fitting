@@ -120,7 +120,7 @@ class ElasticConstants:
             voigt_matrix[5,5] = self.cij_dict['c66']
 
         elif self.symmetry=="hexagonal":                    # hexagonal
-            indicator = np.any( np.array([i=='c11' for i in cij_dict]) )
+            indicator = np.any( np.array([i=='c11' for i in self.cij_dict]) )
             if indicator == True:
                 voigt_matrix[0,0] = self.cij_dict['c11']
                 voigt_matrix[1,1] = self.cij_dict['c11']
