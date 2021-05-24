@@ -195,10 +195,51 @@ class RUSRPR(ElasticConstants):
         for idx, der in enumerate(derivative_matrix):
             log_derivative[idx] = der / sum(der)
 
+        self.cij_dict = cij_dict_original
+
         if return_freqs == True:
             return log_derivative, f
         elif return_freqs == False:
             return log_derivative
+
+
+    
+    def print_logarithmic_derivative (self, print_frequencies=True):
+        print ('start taking derivatives ...')
+        if self.Emat is None:
+            self.initialize()
+        
+        log_der, freqs_calc = self.log_derivatives_analytical(return_freqs=True)
+
+        cij = deepcopy(sorted(self.cij_dict))
+        template = ""
+        for i, _ in enumerate(cij):
+            template += "{" + str(i) + ":<13}"
+        header = ['2 x logarithmic derivative (2 x dlnf / dlnc)']+(len(cij)-1)*['']
+        der_text = template.format(*header) + '\n'
+        der_text = der_text + template.format(*cij) + '\n'
+        der_text = der_text + '-'*13*len(cij) + '\n'
+
+        for ii in np.arange(self.nb_freq):
+            text = [str(round(log_der[ii,j], 6)) for j in np.arange(len(cij))]
+            der_text = der_text + template.format(*text) + '\n'
+
+        if print_frequencies == True:
+            freq_text = {}
+            freq_template = "{0:<10}{1:<13}"
+            freq_text += freq_template.format(*['idx', 'freq calc']) + '\n'
+            freq_text += freq_template.format(*['', '(MHz)']) + '\n'
+            freq_text += '-'*23 + '\n'
+            for ii, f in enumerate(freqs_calc):
+                freq_text += freq_template.format(*[int(ii), round(f, 4)]) + '\n'
+
+            total_text = ''
+            for ii in np.arange(len(der_text.split('\n'))):
+                total_text = total_text + freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
+        else:
+            total_text = der_text
+        
+        return total_text
 
 
 if __name__ == "__main__":
