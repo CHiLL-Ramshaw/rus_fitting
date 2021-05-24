@@ -35,16 +35,12 @@ class RUSComsol(ElasticConstants):
     nb_freq = property(_get_nb_freq, _set_nb_freq)
 
 
-    def compute_resonances(self, nb_freq=None, voigt_dict=None):
-        if nb_freq == None:
-            nb_freq = self._nb_freq
-        if voigt_dict is None:
-            voigt_dict = self.voigt_dict
+    def compute_resonances(self):
         ## Set number of frequencies --------------------------------------------
-        self.model.parameter('nb_freq', str(nb_freq + 6))
+        self.model.parameter('nb_freq', str(self.nb_freq + 6))
         ## Set parameters  ------------------------------------------------------
-        for c_name in sorted(voigt_dict.keys()):
-            self.model.parameter(c_name, str(voigt_dict[c_name]) + " [GPa]")
+        for c_name in sorted(self.voigt_dict.keys()):
+            self.model.parameter(c_name, str(self.voigt_dict[c_name]) + " [GPa]")
         ## Compute resonances ---------------------------------------------------
         self.model.solve(self.study_name)
         self.freqs = self.model.evaluate('abs(freq)', 'MHz')[6:]
@@ -67,7 +63,7 @@ class RUSComsol(ElasticConstants):
 
 
 
-    def log_derivatives_numerical (self, cij_dict=None, dc=1e-4, N=5, Rsquared_threshold=1e-5, nb_freq=None, return_freqs=False):
+    def log_derivatives_numerical (self, dc=1e-4, N=5, Rsquared_threshold=1e-5, return_freqs=False):
         """
         calculating logarithmic derivatives of the resonance frequencies with respect to elastic constants,
         i.e. (df/dc)*(c/f);
@@ -76,29 +72,25 @@ class RUSComsol(ElasticConstants):
         A line is then fitted through these points and the slope is extracted as the derivative.
         """
         print ('start taking derivatives ...')
-        if cij_dict is None:
-            cij_dict = self.cij_dict
-        if nb_freq is None:
-            nb_freq = self.nb_freq
-
-        voigt_dict = self.cij_dict_to_voigt_dict(cij_dict=cij_dict)
-        freq_result = self.compute_resonances(nb_freq=nb_freq, voigt_dict=voigt_dict)
+        
+        cij_dict_original = deepcopy(self.cij_dict)
+        freq_result = self.compute_resonances()
 
         fit_results_dict = {}
-        Rsquared_matrix = np.zeros([len(freq_result), len(cij_dict)])
-        log_derivative_matrix = np.zeros([len(freq_result), len(cij_dict)])
+        Rsquared_matrix = np.zeros([len(freq_result), len(cij_dict_original)])
+        log_derivative_matrix = np.zeros([len(freq_result), len(cij_dict_original)])
         # take derivatives with respect to all elastic constants
         print ('These are the \"true\" elastic constnats:')
-        print(cij_dict)
+        print(cij_dict_original)
         ii = 0
-        for elastic_constant in sorted(cij_dict):
+        for elastic_constant in sorted(cij_dict_original):
             print ('start taking derivative with respect to ', elastic_constant)
             print ('these are the elastic constants around the true values used for the derivative:')
             t1 = time()
             # create an array of elastic constants centered around the "true" value
-            c_result = cij_dict[elastic_constant]
+            c_result = cij_dict_original[elastic_constant]
             c_derivative_array = np.linspace(c_result-N/2*dc, c_result+N/2*dc, N)
-            elasticConstants_derivative_dict = deepcopy(cij_dict)
+            elasticConstants_derivative_dict = deepcopy(cij_dict_original)
 
             #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
             # this calculates all the necessary sets of resonance frequencies for the derivative in series
@@ -107,11 +99,11 @@ class RUSComsol(ElasticConstants):
             for idx, c in enumerate(c_derivative_array):
                 elasticConstants_derivative_dict[elastic_constant] = c
                 print (elasticConstants_derivative_dict)
-                parameter_set_voigt = self.cij_dict_to_voigt_dict(cij_dict=elasticConstants_derivative_dict)
+                self.cij_dict = elasticConstants_derivative_dict
                 # note we don't actually save the resonance frequencies, but we shift them by the values at the "true" elastic constants;
                 # this is done because within the elastic constants in c_test the frequencies change only very little compared to their absolute value,
                 # thus this shift is important to get a good fit later
-                freq_derivative_matrix[:,idx] = self.compute_resonances(voigt_dict=parameter_set_voigt, nb_freq=nb_freq)-freq_result
+                freq_derivative_matrix[:,idx] = self.compute_resonances()-freq_result
 
             # shift array of elastic constants to be centered around zero, for similar argument made for the shift of resonance frequencies
             c_derivative_array = c_derivative_array - c_result
@@ -121,7 +113,7 @@ class RUSComsol(ElasticConstants):
             for idx, freq_derivative_array in enumerate(freq_derivative_matrix):
                 # popt, pcov = curve_fit(line, Ctest, freq, p0=[1e-7, 0])
                 slope, y_intercept = np.polyfit(c_derivative_array, freq_derivative_array, 1)
-                log_derivative_matrix[idx, ii] = 2 * slope * cij_dict[elastic_constant]/freq_result[idx]
+                log_derivative_matrix[idx, ii] = 2 * slope * cij_dict_original[elastic_constant]/freq_result[idx]
 
                 ## check if data really lies on a line
                 # offset.append(popt[1])
@@ -170,6 +162,9 @@ class RUSComsol(ElasticConstants):
             print ('derivative with respect to ', elastic_constant, ' done in ', round(time()-t1, 4), ' s')
             ii += 1
 
+        # set the elastic constants back to their original value
+        self.cij_dict = cij_dict_original
+
         if return_freqs == True:
             return (log_derivative_matrix, freq_result)
         else:
@@ -178,41 +173,41 @@ class RUSComsol(ElasticConstants):
 
 
 
-    # def print_logarithmic_derivative (self, nb_additional_freqs=10, comsol_start=True):
-    #     print ('start taking derivatives ...')
-    #     if isinstance(self.rus_object, RUSComsol):
-    #         if comsol_start == True:
-    #             self.rus_object.start_comsol()
-    #             log_der, freqs_calc = self.rus_object.log_derivatives_numerical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
-    #             self.rus_object.stop_comsol()
-    #         else:
-    #             log_der, freqs_calc = self.rus_object.log_derivatives_numerical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
-    #     if isinstance(self.rus_object, RUSRPR):
-    #         if self.rus_object.Emat is None:
-    #             self.rus_object.initialize()
-    #         log_der, freqs_calc = self.rus_object.log_derivatives_analytical(nb_freq=self.nb_freqs+self.nb_max_missing+nb_additional_freqs, return_freqs=True)
+    def print_logarithmic_derivative (self, comsol_start=False, print_frequencies=True):
+        print ('start taking derivatives ...')
+        if comsol_start == False:
+            log_der, freqs_calc = self.rus_object.log_derivatives_numerical(return_freqs=True)
+        else:
+            self.rus_object.start_comsol()
+            log_der, freqs_calc = self.rus_object.log_derivatives_numerical(return_freqs=True)
+            self.rus_object.stop_comsol()
 
-    #     freq_text = self.print_best_frequencies (freqs_calc=freqs_calc, nb_additional_freqs=nb_additional_freqs, comsol_start=False)
+        cij = deepcopy(sorted(self.cij_dict))
+        template = ""
+        for i, _ in enumerate(cij):
+            template += "{" + str(i) + ":<13}"
+            header = ['2 x logarithmic derivative (2 x dlnf / dlnc)']+(len(cij)-1)*['']
+            der_text = template.format(*header) + '\n'
+            der_text = der_text + template.format(*cij) + '\n'
+            der_text = der_text + '-'*13*len(cij) + '\n'
 
-    #     cij = deepcopy(sorted(self.rus_object.cij_dict))
-    #     template = ""
-    #     for i, _ in enumerate(cij):
-    #         template += "{" + str(i) + ":<13}"
-    #     header = ['2 x logarithmic derivative (2 x dlnf / dlnc)']+(len(cij)-1)*['']
-    #     der_text = template.format(*header) + '\n'
-    #     der_text = der_text + template.format(*cij) + '\n'
-    #     der_text = der_text + '-'*13*len(cij) + '\n'
-    #     for ii in np.arange(len(freq_text.split('\n'))):
-    #         if ii < self.nb_freqs+len(self.best_freqs_missing):
-    #             text = [str(round(log_der[ii,j], 6)) for j in np.arange(len(cij))]
-    #             der_text = der_text + template.format(*text) + '\n'
-    #         else:
-    #             text = ['']*len(cij)
-    #             der_text = der_text + template.format(*text) + '\n'
+        for ii in np.arange(self.nb_freq):
+            text = [str(round(log_der[ii,j], 6)) for j in np.arange(len(cij))]
+            der_text = der_text + template.format(*text) + '\n'
 
-    #     total_text = ''
-    #     for ii in np.arange(len(freq_text.split('\n'))):
-    #         total_text = total_text + freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
-    #     # print(total_text)
+        if print_frequencies == True:
+            freq_text = ''
+            freq_template = "{0:<10}{1:<13}"
+            freq_text += freq_template.format(*['idx', 'freq calc']) + '\n'
+            freq_text += freq_template.format(*['', '(MHz)']) + '\n'
+            freq_text += '-'*23 + '\n'
+            for ii, f in enumerate(freqs_calc):
+                freq_text += freq_template.format(*[int(ii), round(f, 4)]) + '\n'
+            total_text = ''
+            for ii in np.arange(len(der_text.split('\n'))):
+                total_text = total_text + freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
 
-    #     return total_text
+        else:
+            total_text = der_text
+
+        return total_text

@@ -31,7 +31,7 @@ bounds_dict  = {"c11": [135, 142],
 rus_object = RUSRPR(cij_dict=elastic_dict, symmetry="hexagonal",
                         dimensions=[0.911e-3,1.02e-3,1.305e-3],
                         mass = 8.9e-6,
-                        order = 10,
+                        order = 16,
                         nb_freq=84)
 
 # rus_object.start_comsol()
