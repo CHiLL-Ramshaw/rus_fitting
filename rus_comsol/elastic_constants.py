@@ -179,9 +179,8 @@ class ElasticConstants:
         return self.R
 
 
-    def rotation_voigt(self, R=None, voigt_matrix=None):
-        if R is None:
-            R = self.R
+    def rotation_voigt(self):
+        R = self.R
         M = np.array([
         [R[0,0]**2,
         R[0,1]**2,
@@ -220,70 +219,67 @@ class ElasticConstants:
         R[0,2]*R[1,0]+R[0,0]*R[1,2],
         R[0,0]*R[1,1]+R[0,1]*R[1,0]]
         ])
-        if voigt_matrix is None:
-            voigt_matrix = self.voigt_matrix
-        self.voigt_matrix = np.matmul(M, np.matmul(voigt_matrix, M.T))
+
+        self.voigt_matrix = np.matmul(M, np.matmul(self.voigt_matrix, M.T))
         return self.voigt_matrix
 
 
-    def voigt_matrix_to_tensor(self, voigt_matrix=None):
+    def voigt_matrix_to_tensor(self):
         """
         returns the elastic tensor from given elastic constants in pars
         (a dictionary of elastic constants)
         based on the length of pars it decides what crystal structure we the sample has
         """
         cijkl = np.zeros([3,3,3,3])
-        if voigt_matrix is None:
-            voigt_matrix = self.voigt_matrix
 
-        cijkl[0,0,0,0] = voigt_matrix[0,0]
-        cijkl[1,1,1,1] = voigt_matrix[1,1]
-        cijkl[2,2,2,2] = voigt_matrix[2,2]
-        cijkl[0,0,1,1] = cijkl[1,1,0,0] = voigt_matrix[0,1]
-        cijkl[2,2,0,0] = cijkl[0,0,2,2] = voigt_matrix[0,2]
-        cijkl[1,1,2,2] = cijkl[2,2,1,1] = voigt_matrix[1,2]
-        cijkl[0,1,0,1] = cijkl[1,0,0,1] = cijkl[0,1,1,0] = cijkl[1,0,1,0] = voigt_matrix[5,5]
-        cijkl[0,2,0,2] = cijkl[2,0,0,2] = cijkl[0,2,2,0] = cijkl[2,0,2,0] = voigt_matrix[4,4]
-        cijkl[1,2,1,2] = cijkl[2,1,2,1] = cijkl[2,1,1,2] = cijkl[1,2,2,1] = voigt_matrix[3,3]
+        cijkl[0,0,0,0] = self.voigt_matrix[0,0]
+        cijkl[1,1,1,1] = self.voigt_matrix[1,1]
+        cijkl[2,2,2,2] = self.voigt_matrix[2,2]
+        cijkl[0,0,1,1] = cijkl[1,1,0,0] = self.voigt_matrix[0,1]
+        cijkl[2,2,0,0] = cijkl[0,0,2,2] = self.voigt_matrix[0,2]
+        cijkl[1,1,2,2] = cijkl[2,2,1,1] = self.voigt_matrix[1,2]
+        cijkl[0,1,0,1] = cijkl[1,0,0,1] = cijkl[0,1,1,0] = cijkl[1,0,1,0] = self.voigt_matrix[5,5]
+        cijkl[0,2,0,2] = cijkl[2,0,0,2] = cijkl[0,2,2,0] = cijkl[2,0,2,0] = self.voigt_matrix[4,4]
+        cijkl[1,2,1,2] = cijkl[2,1,2,1] = cijkl[2,1,1,2] = cijkl[1,2,2,1] = self.voigt_matrix[3,3]
 
         self.cijkl = cijkl
         return cijkl
 
 
-    def cij_dict_to_tensor (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
-        if angle_x is None:
-            angle_x = self.angle_x
-        if angle_y is None:
-            angle_y = self.angle_y
-        if angle_z is None:
-            angle_z = self.angle_z
-        if cij_dict is None:
-            cij_dict = self.cij_dict
+    # def cij_dict_to_tensor (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
+    #     if angle_x is None:
+    #         angle_x = self.angle_x
+    #     if angle_y is None:
+    #         angle_y = self.angle_y
+    #     if angle_z is None:
+    #         angle_z = self.angle_z
+    #     if cij_dict is None:
+    #         cij_dict = self.cij_dict
 
-        voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=cij_dict)
-        R = self.rotation_matrix(angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
-        voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
-        cijkl = self.voigt_matrix_to_tensor(voigt_matrix=voigt_matrix_R)
+    #     voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=cij_dict)
+    #     R = self.rotation_matrix(angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
+    #     voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
+    #     cijkl = self.voigt_matrix_to_tensor(voigt_matrix=voigt_matrix_R)
 
-        return cijkl
+    #     return cijkl
 
 
-    def cij_dict_to_voigt_dict (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
-        if angle_x is None:
-            angle_x = self.angle_x
-        if angle_y is None:
-            angle_y = self.angle_y
-        if angle_z is None:
-            angle_z = self.angle_z
-        if cij_dict is None:
-            cij_dict = self.cij_dict
+    # def cij_dict_to_voigt_dict (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
+    #     if angle_x is None:
+    #         angle_x = self.angle_x
+    #     if angle_y is None:
+    #         angle_y = self.angle_y
+    #     if angle_z is None:
+    #         angle_z = self.angle_z
+    #     if cij_dict is None:
+    #         cij_dict = self.cij_dict
 
-        voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=cij_dict)
-        R = self.rotation_matrix(angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
-        voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
-        voigt_dict = self.voigt_matrix_to_voigt_dict(voigt_matrix=voigt_matrix_R)
+    #     voigt_matrix = self.cij_dict_to_voigt_matrix(cij_dict=cij_dict)
+    #     R = self.rotation_matrix(angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
+    #     voigt_matrix_R = self.rotation_voigt(R=R, voigt_matrix=voigt_matrix)
+    #     voigt_dict = self.voigt_matrix_to_voigt_dict(voigt_matrix=voigt_matrix_R)
 
-        return voigt_dict
+    #     return voigt_dict
 
 
 
