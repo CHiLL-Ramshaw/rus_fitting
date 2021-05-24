@@ -6,15 +6,15 @@
 	# function evals     	= 1500
 	# data points        	= 84
 	# variables          	= 5
-	# fit duration       	= 42.14 seconds
-	# chi-square         	= 0.00246620
-	# reduced chi-square 	= 0.00003122
+	# fit duration       	= 37.54 seconds
+	# chi-square         	= 0.00246542
+	# reduced chi-square 	= 0.00003121
 #[[Variables]]
-	# c11 : 138.389  unit  (init = [[135, 142], unit])
-	# c12 : 42.272  unit  (init = [[39, 45], unit])
-	# c13 : 14.642  unit  (init = [[12, 17], unit])
-	# c33 : 194.446  unit  (init = [[192, 197], unit])
-	# c44 : 44.900  unit  (init = [[43, 47], unit])
+	# c11 : 138.411  unit  (init = [[135, 142], unit])
+	# c12 : 42.307  unit  (init = [[39, 45], unit])
+	# c13 : 14.480  unit  (init = [[12, 17], unit])
+	# c33 : 194.385  unit  (init = [[192, 197], unit])
+	# c44 : 44.904  unit  (init = [[43, 47], unit])
 #[[Fixed values]]
 	# angle_x : 0.00000000  unit 
 	# angle_y : 0.00000000  unit 

@@ -87,94 +87,84 @@ class ElasticConstants:
         self.voigt_matrix_to_tensor()
 
 
-    def cij_dict_to_voigt_matrix(self, cij_dict=None):
+    def cij_dict_to_voigt_matrix(self):
         """
         returns the elastic tensor from given elastic constants in pars
         (a dictionary of elastic constants)
         based on the length of pars it decides what crystal structure we the sample has
         """
-        if cij_dict is None:
-            cij_dict = deepcopy(self.cij_dict)
         voigt_matrix = np.zeros((6,6))
 
         if self.symmetry=="cubic":
-            voigt_matrix[0,0] = voigt_matrix[1,1] = voigt_matrix[2,2] = cij_dict['c11']
-            voigt_matrix[0,1] = voigt_matrix[0,2] = voigt_matrix[1,2] = cij_dict['c12']
-            voigt_matrix[3,3] = voigt_matrix[4,4] = voigt_matrix[5,5] = cij_dict['c44']
+            voigt_matrix[0,0] = voigt_matrix[1,1] = voigt_matrix[2,2] = self.cij_dict['c11']
+            voigt_matrix[0,1] = voigt_matrix[0,2] = voigt_matrix[1,2] = self.cij_dict['c12']
+            voigt_matrix[3,3] = voigt_matrix[4,4] = voigt_matrix[5,5] = self.cij_dict['c44']
 
         elif self.symmetry=="tetragonal":
-            voigt_matrix[0,0] = voigt_matrix[1,1] = cij_dict['c11']
-            voigt_matrix[2,2]                     = cij_dict['c33']
-            voigt_matrix[0,1]                     = cij_dict['c12']
-            voigt_matrix[0,2] = voigt_matrix[1,2] = cij_dict['c13']
-            voigt_matrix[3,3] = voigt_matrix[4,4] = cij_dict['c44']
-            voigt_matrix[5,5]                     = cij_dict['c66']
+            voigt_matrix[0,0] = voigt_matrix[1,1] = self.cij_dict['c11']
+            voigt_matrix[2,2]                     = self.cij_dict['c33']
+            voigt_matrix[0,1]                     = self.cij_dict['c12']
+            voigt_matrix[0,2] = voigt_matrix[1,2] = self.cij_dict['c13']
+            voigt_matrix[3,3] = voigt_matrix[4,4] = self.cij_dict['c44']
+            voigt_matrix[5,5]                     = self.cij_dict['c66']
 
         elif self.symmetry=="orthorhombic":
-            voigt_matrix[0,0] = cij_dict['c11']
-            voigt_matrix[1,1] = cij_dict['c22']
-            voigt_matrix[2,2] = cij_dict['c33']
-            voigt_matrix[0,1] = cij_dict['c12']
-            voigt_matrix[0,2] = cij_dict['c13']
-            voigt_matrix[1,2] = cij_dict['c23']
-            voigt_matrix[3,3] = cij_dict['c44']
-            voigt_matrix[4,4] = cij_dict['c55']
-            voigt_matrix[5,5] = cij_dict['c66']
+            voigt_matrix[0,0] = self.cij_dict['c11']
+            voigt_matrix[1,1] = self.cij_dict['c22']
+            voigt_matrix[2,2] = self.cij_dict['c33']
+            voigt_matrix[0,1] = self.cij_dict['c12']
+            voigt_matrix[0,2] = self.cij_dict['c13']
+            voigt_matrix[1,2] = self.cij_dict['c23']
+            voigt_matrix[3,3] = self.cij_dict['c44']
+            voigt_matrix[4,4] = self.cij_dict['c55']
+            voigt_matrix[5,5] = self.cij_dict['c66']
 
         elif self.symmetry=="hexagonal":                    # hexagonal
             indicator = np.any( np.array([i=='c11' for i in cij_dict]) )
             if indicator == True:
-                voigt_matrix[0,0] = cij_dict['c11']
-                voigt_matrix[1,1] = cij_dict['c11']
-                voigt_matrix[2,2] = cij_dict['c33']
-                voigt_matrix[0,1] = cij_dict['c12']
-                voigt_matrix[0,2] = cij_dict['c13']
-                voigt_matrix[1,2] = cij_dict['c13']
-                voigt_matrix[3,3] = cij_dict['c44']
-                voigt_matrix[4,4] = cij_dict['c44']
-                voigt_matrix[5,5] = (cij_dict['c11']-cij_dict['c12'])/2
+                voigt_matrix[0,0] = self.cij_dict['c11']
+                voigt_matrix[1,1] = self.cij_dict['c11']
+                voigt_matrix[2,2] = self.cij_dict['c33']
+                voigt_matrix[0,1] = self.cij_dict['c12']
+                voigt_matrix[0,2] = self.cij_dict['c13']
+                voigt_matrix[1,2] = self.cij_dict['c13']
+                voigt_matrix[3,3] = self.cij_dict['c44']
+                voigt_matrix[4,4] = self.cij_dict['c44']
+                voigt_matrix[5,5] = (self.cij_dict['c11']-self.cij_dict['c12'])/2
             else:
-                voigt_matrix[0,0] = 2*cij_dict['c66'] + cij_dict['c12']
-                voigt_matrix[1,1] = cij_dict['c11']
-                voigt_matrix[2,2] = cij_dict['c33']
-                voigt_matrix[0,1] = cij_dict['c12']
-                voigt_matrix[0,2] = cij_dict['c13']
-                voigt_matrix[1,2] = cij_dict['c13']
-                voigt_matrix[3,3] = cij_dict['c44']
-                voigt_matrix[4,4] = cij_dict['c44']
-                voigt_matrix[5,5] = cij_dict['c66']
+                voigt_matrix[0,0] = 2*self.cij_dict['c66'] + self.cij_dict['c12']
+                voigt_matrix[1,1] = self.cij_dict['c11']
+                voigt_matrix[2,2] = self.cij_dict['c33']
+                voigt_matrix[0,1] = self.cij_dict['c12']
+                voigt_matrix[0,2] = self.cij_dict['c13']
+                voigt_matrix[1,2] = self.cij_dict['c13']
+                voigt_matrix[3,3] = self.cij_dict['c44']
+                voigt_matrix[4,4] = self.cij_dict['c44']
+                voigt_matrix[5,5] = self.cij_dict['c66']
 
         self.voigt_matrix = (voigt_matrix + voigt_matrix.T
                              - np.diag(voigt_matrix.diagonal()))
         return self.voigt_matrix
 
 
-    def voigt_matrix_to_voigt_dict(self, voigt_matrix=None):
+    def voigt_matrix_to_voigt_dict(self):
         self.voigt_dict = {}
-        # voigt_matrix = np.triu(self.voigt_matrix) # get only upper part of the matrix
-        if voigt_matrix is None:
-            voigt_matrix = self.voigt_matrix
+        voigt_matrix = np.triu(self.voigt_matrix) # get only upper part of the matrix
         for i in range(6):
             for j in range(i, 6):
                 self.voigt_dict["c"+str(i+1)+str(j+1)] = voigt_matrix[i,j]
         return self.voigt_dict
 
 
-    def rotation_matrix(self, angle_x=None, angle_y=None, angle_z=None):
+    def rotation_matrix(self):
         """
         define general 3D rotation matrix with rotation angles angle_x, angle_y, angle_z about x, y, z
         axes respectively;
         angles are given in degrees
         """
-        if angle_x is None:
-            angle_x = self.angle_x
-        if angle_y is None:
-            angle_y = self.angle_y
-        if angle_z is None:
-            angle_z = self.angle_z
-        angle_x = np.deg2rad(angle_x)
-        angle_y = np.deg2rad(angle_y)
-        angle_z = np.deg2rad(angle_z)
+        angle_x = np.deg2rad(self.angle_x)
+        angle_y = np.deg2rad(self.angle_y)
+        angle_z = np.deg2rad(self.angle_z)
         
         Rx = np.array([[1, 0, 0],
                     [0, cos(angle_x), -sin(angle_x)],
