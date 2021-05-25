@@ -297,7 +297,7 @@ class RUSFitting:
         return (report)
 
 
-    def print_best_frequencies (self, freqs_calc=None, nb_additional_freqs=10, comsol_start=True):
+    def print_best_frequencies (self, freqs_calc=None, nb_additional_freqs=10, comsol_start=False):
         freqs_data = np.array(self.load_data())
 
         self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing + nb_additional_freqs
@@ -306,7 +306,6 @@ class RUSFitting:
                 if comsol_start == True:
                     self.rus_object.start_comsol()
                     freqs_calc = np.array(self.rus_object.compute_resonances())
-                    self.rus_object.stop_comsol()
                 else:
                     freqs_calc = np.array(self.rus_object.compute_resonances())
             if isinstance(self.rus_object, RUSRPR):
@@ -345,8 +344,13 @@ class RUSFitting:
 
     def print_final_output (self, comsol_start=True):
         fit_report = self.print_fit_report()
-        freq_text  = self.print_best_frequencies(freqs_calc=None, nb_additional_freqs=10, comsol_start=comsol_start)
-        der_text   = self.rus_object.print_logarithmic_derivative (print_frequencies=False)
+        if isinstance(self.rus_object, RUSRPR):
+            freq_text  = self.print_best_frequencies(nb_additional_freqs=10)
+            der_text = self.rus_object.print_logarithmic_derivative (print_frequencies=False)
+        if isinstance(self.rus_object, RUSComsol):
+            freq_text  = self.print_best_frequencies(nb_additional_freqs=10, comsol_start=comsol_start)
+            der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False, comsol_start=False)
+            self.rus_object.stop_comsol()
 
         sample_template = "{0:<40}{1:<20}"
         sample_text = '[[Sample Characteristics]] \n'
@@ -433,6 +437,6 @@ class RUSFitting:
             report = self.print_final_output()
             print (report)
         self.save_report(report)
-        
+
 
         return self.rus_object

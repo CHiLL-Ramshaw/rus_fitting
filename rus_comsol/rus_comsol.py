@@ -72,7 +72,7 @@ class RUSComsol(ElasticConstants):
         A line is then fitted through these points and the slope is extracted as the derivative.
         """
         print ('start taking derivatives ...')
-        
+
         cij_dict_original = deepcopy(self.cij_dict)
         freq_result = self.compute_resonances()
 
@@ -174,13 +174,11 @@ class RUSComsol(ElasticConstants):
 
 
     def print_logarithmic_derivative (self, comsol_start=False, print_frequencies=True):
-        print ('start taking derivatives ...')
         if comsol_start == False:
-            log_der, freqs_calc = self.rus_object.log_derivatives_numerical(return_freqs=True)
+            log_der, freqs_calc = self.log_derivatives_numerical(return_freqs=True)
         else:
-            self.rus_object.start_comsol()
-            log_der, freqs_calc = self.rus_object.log_derivatives_numerical(return_freqs=True)
-            self.rus_object.stop_comsol()
+            self.start_comsol()
+            log_der, freqs_calc = self.log_derivatives_numerical(return_freqs=True)
 
         cij = deepcopy(sorted(self.cij_dict))
         template = ""
