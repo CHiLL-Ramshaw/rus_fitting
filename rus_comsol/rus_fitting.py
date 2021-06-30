@@ -33,7 +33,7 @@ class RUSFitting:
         self.nb_max_missing = nb_max_missing
         self.freqs_file     = freqs_file
         self.col_freqs      = 0
-        self.freqs_data     = self.load_data()
+        self.freqs_data     = self.load_data(nb_freqs)
         self.free_pars_name  = sorted(self.bounds_dict.keys())
         self.fixed_pars_name = np.setdiff1d(sorted(self.init_pars.keys()),
                                              self.free_pars_name)
@@ -91,7 +91,7 @@ class RUSFitting:
 
 
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    def load_data(self):
+    def load_data(self, nb_freqs = 'all'):
         """
         Frequencies should be in MHz
         """
@@ -100,7 +100,7 @@ class RUSFitting:
         if freqs_data.size is tuple:
             freqs_data = freqs_data[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
-        if nb_freq == 'all':
+        if nb_freqs == 'all':
             self.nb_freqs = len(freqs_data)
         try:
             assert self.nb_freqs <= freqs_data.size
@@ -258,7 +258,7 @@ class RUSFitting:
                  log_to_driver=False)
 
 
-        def run_fit(self, print_derivatives=False):
+    def run_fit(self, print_derivatives=False):
         ## Start Ray
         if self.ray_init_auto == True:
             self.ray_init()
@@ -313,7 +313,7 @@ class RUSFitting:
 
 
     def report_fit(self):
-        fit_out = self.fit_output
+        fit_output = self.fit_output
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
         N_variables = len(fit_output.x)
