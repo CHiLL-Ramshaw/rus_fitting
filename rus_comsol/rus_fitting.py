@@ -68,6 +68,13 @@ class RUSFitting:
         ## Empty spaces
         self.best_chi2 = None
         self.nb_gens   = 0
+        self.best_freqs_calc = []
+        self.best_index_missing = []
+        self.best_freqs_missing = []
+
+        ## empty spaces for fit properties
+        self.fit_output = None
+        self.fit_duration = 0
 
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -93,6 +100,8 @@ class RUSFitting:
         if freqs_data.size is tuple:
             freqs_data = freqs_data[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
+        if nb_freq == 'all':
+            self.nb_freqs = len(freqs_data)
         try:
             assert self.nb_freqs <= freqs_data.size
         except AssertionError:
@@ -129,16 +138,19 @@ class RUSFitting:
             ## Only select the first number of "freq to compare"
             freqs_sim = freqs_sim_calc[:self.nb_freqs]
             freqs_missing = []
-        return freqs_sim, freqs_missing
+            index_missing = []
+        return freqs_sim, freqs_missing, index_missing
 
 
     def compute_chi2(self, freqs_calc_list):
         ## Remove the useless small frequencies
         chi2 = np.empty(len(freqs_calc_list), dtype=np.float64)
         freqs_missing_list = []
+        index_missing_list = []
         for i, freqs_calc in enumerate(freqs_calc_list):
-            freqs_sim, freqs_missing = self.sort_freqs(freqs_calc)
+            freqs_sim, freqs_missing, index_missing = self.sort_freqs(freqs_calc)
             freqs_missing_list.append(freqs_missing)
+            index_missing_list.append(index_missing)
             chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)
         ## Best parameters for lowest chi2
         index_best = np.argmin(chi2)
@@ -147,12 +159,14 @@ class RUSFitting:
             for i, free_name in enumerate(self.free_pars_name):
                 self.best_pars[free_name] = self.last_gen[index_best][i]
             self.best_freqs_missing = freqs_missing_list[index_best]
+            self.best_freqs_calc = freqs_calc_list[index_best]
+            self.best_index_missing = index_missing_list[index_best]
         return chi2
 
 
     def generate_workers(self):
-        # if isinstance(self.rus_object, RUSRPR):
-        #     self.rus_object.initialize()
+        if isinstance(self.rus_object, RUSRPR):
+            self.rus_object.initialize()
         for _ in range(self._nb_workers):
             if isinstance(self.rus_object, RUSComsol):
                 worker = ray.remote(RUSComsol).remote(cij_dict=self.rus_object.cij_dict,
@@ -244,7 +258,7 @@ class RUSFitting:
                  log_to_driver=False)
 
 
-    def run_fit(self):
+        def run_fit(self, print_derivatives=False):
         ## Start Ray
         if self.ray_init_auto == True:
             self.ray_init()
@@ -259,7 +273,7 @@ class RUSFitting:
         ## Start Stopwatch
         t0 = time.time()
         ## Run fit algorithm
-        out = differential_evolution(self.polish_func, bounds=self.bounds,
+        fit_output = differential_evolution(self.polish_func, bounds=self.bounds,
                                     workers=self.map, updating=self.updating,
                                     polish=self.polish,
                                     maxiter=self.N_generation,
@@ -268,25 +282,48 @@ class RUSFitting:
                                     recombination=self.crossing,
                                     tol=self.tolerance
                                     )
+        self.fit_output = fit_output
+        self.fit_duration = time.time() - t0
 
         ## Export final parameters from the fit
         for i, free_name in enumerate(self.free_pars_name):
-            self.best_pars[free_name] = out.x[i]
-            self.rus_object.cij_dict[free_name] = out.x[i]
+            self.best_pars[free_name] = fit_output.x[i]
+            self.rus_object.cij_dict[free_name] = fit_output.x[i]
+
+        ## Close COMSOL for each workers
+        self.close_workers()
+
+        ## Stop Ray
+        ray.shutdown()
 
         ## Fit report
-        duration    = np.round(time.time() - t0, 2)
-        N_points    = self.nb_freqs
-        N_variables = len(out.x)
-        chi2 = out.fun
-        reduced_chi2 = chi2 / (N_points - N_variables)
+        if print_derivatives == False:
+            vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+            report = vertical_spacing
+            report += self.report_fit()
+            report += vertical_spacing
+            report += self.report_best_freqs()
+            print(report)
+        else:
+            report = self.report_total()
+            print(report)
+        self.save_report(report)
 
-        print("\n")
+        return self.rus_object
+
+
+    def report_fit(self):
+        fit_out = self.fit_output
+        duration    = np.round(self.fit_duration, 2)
+        N_points    = self.nb_freqs
+        N_variables = len(fit_output.x)
+        chi2 = fit_output.fun
+        reduced_chi2 = chi2 / (N_points - N_variables)
         report = "#[[Fit Statistics]]" + "\n"
-        report+= "\t# fit success        \t= " + str(out.success) + "\n"
+        report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
-        report+= "\t# generations        \t= " + str(out.nit) + " + 1" + "\n"
-        report+= "\t# function evals     \t= " + str(out.nfev) + "\n"
+        report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
+        report+= "\t# function evals     \t= " + str(fit_output.nfev) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
         report+= "\t# variables          \t= " + str(N_variables) + "\n"
         report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
@@ -294,7 +331,7 @@ class RUSFitting:
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
         report+= "#[[Variables]]" + "\n"
         for i, free_name in enumerate(self.free_pars_name):
-            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(out.x[i]) + " " + \
+            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(fit_output.x[i]) + " " + \
                      " unit " + \
                      " (init = [" + str(self.bounds_dict[free_name]) + \
                      ", " +         "unit" + "])" + "\n"
@@ -308,22 +345,93 @@ class RUSFitting:
         for freqs_missing in self.best_freqs_missing:
             report += r"{0:.4f}".format(freqs_missing) + " MHz\n"
 
-        print(report)
+        return report
 
+
+    def report_best_freqs(self, freqs_calc=None, nb_additional_freqs=10, comsol_start=False):
+        freqs_data = np.array(self.load_data())
+
+        self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing + nb_additional_freqs
+        if freqs_calc is None:
+            if isinstance(self.rus_object, RUSComsol):
+                if comsol_start == True:
+                    self.rus_object.start_comsol()
+                    freqs_calc = np.array(self.rus_object.compute_resonances())
+                else:
+                    freqs_calc = np.array(self.rus_object.compute_resonances())
+            if isinstance(self.rus_object, RUSRPR):
+                if self.rus_object.Emat is None:
+                    self.rus_object.initialize()
+                freqs_calc = np.array(self.rus_object.compute_resonances())
+        self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing
+
+        index_missing = self.best_index_missing
+        for idx in index_missing:
+            freqs_data = np.insert(freqs_data, idx, 0)
+
+        diff = np.zeros(len(freqs_data))
+        for idx in np.arange(len(freqs_data)):
+            if freqs_data[idx] != 0:
+                diff[idx] = abs(freqs_data[idx]-freqs_calc[idx]) / freqs_data[idx] * 100
+        rms = sum(diff[diff!=0]**2) / len(diff[diff!=0])
+
+        template = "{0:<8}{1:<13}{2:<13}{3:<13}"
+        compare_text = template.format(*['index', 'freq exp', 'freq calc', 'diff (%)']) + '\n'
+        compare_text = compare_text + template.format(*['', '(MHz)', '(MHz)', '']) + '\n'
+        compare_text = compare_text + '-'*(8+13+13+13) + '\n'
+        for ii in np.arange(len(freqs_calc)):
+            if ii < len(freqs_data):
+                compare_text+= template.format(*[ii, round(freqs_data[ii],6), round(freqs_calc[ii],6), round(diff[ii], 3)]) + '\n'
+            else:
+                compare_text+= template.format(*[ii, '', round(freqs_calc[ii],6)], '') + '\n'
+        compare_text = compare_text + '-'*(6+13+13+10) + '\n'
+        compare_text = compare_text + 'RMS = ' + str(round(rms,3)) + ' %\n'
+        compare_text = compare_text + '-'*(6+13+13+10) + '\n'
+
+        return compare_text
+
+
+    def report_total(self, comsol_start=True):
+        report_fit = self.report_fit()
+        if isinstance(self.rus_object, RUSRPR):
+            freq_text  = self.report_best_freqs(nb_additional_freqs=10)
+            der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False)
+        if isinstance(self.rus_object, RUSComsol):
+            freq_text  = self.report_best_freqs(nb_additional_freqs=10, comsol_start=comsol_start)
+            der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False, comsol_start=False)
+            self.rus_object.stop_comsol()
+
+        sample_template = "{0:<40}{1:<20}"
+        sample_text = '[[Sample Characteristics]] \n'
+        sample_text += sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
+        if isinstance(self.rus_object, RUSRPR):
+            sample_text += sample_template.format(*['sample dimensions (mm) (x,y,z):', str(self.rus_object.dimensions*1e3)]) + '\n'
+            sample_text += sample_template.format(*['mass (mg):', self.rus_object.mass*1e6]) + '\n'
+            sample_text += sample_template.format(*['highest order basis polynomial:', self.rus_object.order]) + '\n'
+            sample_text += sample_template.format(*['resonance frequencies calculated with:', 'RUS_RPR']) + '\n'
+        if isinstance(self.rus_object, RUSComsol):
+            sample_text += sample_template.format(*['Comsol file:', self.rus_object.mph_file]) + '\n'
+            sample_text += sample_template.format(*['resonance frequencies calculated with:', 'Comsol']) + '\n'
+
+        data_text = ''
+        for ii in np.arange(len(freq_text.split('\n'))):
+            if ii < len(der_text.split('\n')):
+                data_text += freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
+            else:
+                data_text += freq_text.split('\n')[ii] + '\n'
+
+        vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+        report_total = vertical_spacing + sample_text + vertical_spacing +\
+                 report_fit + vertical_spacing + data_text
+
+        return report_total
+
+
+    def save_report(self, report):
         if self.report_name == "":
-            self.report_name = "fit_report.txt"
+            self.report_name = "report_fit.txt"
         report_file = open(self.report_name, "w")
         report_file.write(report)
         report_file.close()
-
-        ## Close COMSOL for each workers
-        self.close_workers()
-
-        ## Stop Ray
-        ray.shutdown()
-
-        return self.rus_object
-
-
 
 
