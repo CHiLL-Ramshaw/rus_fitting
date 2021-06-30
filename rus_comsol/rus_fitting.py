@@ -73,7 +73,7 @@ class RUSFitting:
         self.best_freqs_missing = []
 
         ## empty spaces for fit properties
-        self.out = None
+        self.fit_output = None
         self.fit_duration = 0
 
 
@@ -91,25 +91,23 @@ class RUSFitting:
 
 
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    def load_data(self, nb_freq=None):
+    def load_data(self):
         """
         Frequencies should be in MHz
         """
-        if nb_freq is None:
-            nb_freq = self.nb_freqs
         ## Load the resonance data in MHz
         freqs_data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
         if freqs_data.size is tuple:
             freqs_data = freqs_data[:,self.col_freqs]
         ## Only select the first number of "freq to compare"
         if nb_freq == 'all':
-            self.nb_freqs = nb_freq = len(freqs_data)
+            self.nb_freqs = len(freqs_data)
         try:
-            assert nb_freq <= freqs_data.size
+            assert self.nb_freqs <= freqs_data.size
         except AssertionError:
             print("You need --- nb calculated freqs <= nb data freqs")
             sys.exit(1)
-        return freqs_data[:nb_freq]
+        return freqs_data[:self.nb_freqs]
 
 
     def assignement(self, freqs_data, freqs_sim):
@@ -259,19 +257,73 @@ class RUSFitting:
                  include_dashboard=False,
                  log_to_driver=False)
 
-    def print_fit_report(self):
-        fit_out = self.out
+
+        def run_fit(self, print_derivatives=False):
+        ## Start Ray
+        if self.ray_init_auto == True:
+            self.ray_init()
+
+        self.generate_workers()
+        print("--- Pool of "
+              + str(self._nb_workers)
+              + " workers for "
+              + str(cpu_count(logical=False))
+              + " cores ---")
+
+        ## Start Stopwatch
+        t0 = time.time()
+        ## Run fit algorithm
+        fit_output = differential_evolution(self.polish_func, bounds=self.bounds,
+                                    workers=self.map, updating=self.updating,
+                                    polish=self.polish,
+                                    maxiter=self.N_generation,
+                                    popsize=self.population,
+                                    mutation=self.mutation,
+                                    recombination=self.crossing,
+                                    tol=self.tolerance
+                                    )
+        self.fit_output = fit_output
+        self.fit_duration = time.time() - t0
+
+        ## Export final parameters from the fit
+        for i, free_name in enumerate(self.free_pars_name):
+            self.best_pars[free_name] = fit_output.x[i]
+            self.rus_object.cij_dict[free_name] = fit_output.x[i]
+
+        ## Close COMSOL for each workers
+        self.close_workers()
+
+        ## Stop Ray
+        ray.shutdown()
+
+        ## Fit report
+        if print_derivatives == False:
+            vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+            report = vertical_spacing
+            report += self.report_fit()
+            report += vertical_spacing
+            report += self.report_best_freqs()
+            print(report)
+        else:
+            report = self.report_total()
+            print(report)
+        self.save_report(report)
+
+        return self.rus_object
+
+
+    def report_fit(self):
+        fit_out = self.fit_output
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
-        N_variables = len(fit_out.x)
-        chi2 = fit_out.fun
+        N_variables = len(fit_output.x)
+        chi2 = fit_output.fun
         reduced_chi2 = chi2 / (N_points - N_variables)
-        # print("\n")
         report = "#[[Fit Statistics]]" + "\n"
-        report+= "\t# fit success        \t= " + str(fit_out.success) + "\n"
+        report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
-        report+= "\t# generations        \t= " + str(fit_out.nit) + " + 1" + "\n"
-        report+= "\t# function evals     \t= " + str(fit_out.nfev) + "\n"
+        report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
+        report+= "\t# function evals     \t= " + str(fit_output.nfev) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
         report+= "\t# variables          \t= " + str(N_variables) + "\n"
         report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
@@ -279,7 +331,7 @@ class RUSFitting:
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
         report+= "#[[Variables]]" + "\n"
         for i, free_name in enumerate(self.free_pars_name):
-            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(fit_out.x[i]) + " " + \
+            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(fit_output.x[i]) + " " + \
                      " unit " + \
                      " (init = [" + str(self.bounds_dict[free_name]) + \
                      ", " +         "unit" + "])" + "\n"
@@ -293,11 +345,10 @@ class RUSFitting:
         for freqs_missing in self.best_freqs_missing:
             report += r"{0:.4f}".format(freqs_missing) + " MHz\n"
 
-        # print(report)
-        return (report)
+        return report
 
 
-    def print_best_frequencies (self, freqs_calc=None, nb_additional_freqs=10, comsol_start=False):
+    def report_best_freqs(self, freqs_calc=None, nb_additional_freqs=10, comsol_start=False):
         freqs_data = np.array(self.load_data())
 
         self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing + nb_additional_freqs
@@ -337,18 +388,16 @@ class RUSFitting:
         compare_text = compare_text + 'RMS = ' + str(round(rms,3)) + ' %\n'
         compare_text = compare_text + '-'*(6+13+13+10) + '\n'
 
-        # if print_bool==True:
-        #     print (compare_text)
-        return (compare_text)
+        return compare_text
 
 
-    def print_final_output (self, comsol_start=True):
-        fit_report = self.print_fit_report()
+    def report_total(self, comsol_start=True):
+        report_fit = self.report_fit()
         if isinstance(self.rus_object, RUSRPR):
-            freq_text  = self.print_best_frequencies(nb_additional_freqs=10)
-            der_text = self.rus_object.print_logarithmic_derivative (print_frequencies=False)
+            freq_text  = self.report_best_freqs(nb_additional_freqs=10)
+            der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False)
         if isinstance(self.rus_object, RUSComsol):
-            freq_text  = self.print_best_frequencies(nb_additional_freqs=10, comsol_start=comsol_start)
+            freq_text  = self.report_best_freqs(nb_additional_freqs=10, comsol_start=comsol_start)
             der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False, comsol_start=False)
             self.rus_object.stop_comsol()
 
@@ -372,71 +421,17 @@ class RUSFitting:
                 data_text += freq_text.split('\n')[ii] + '\n'
 
         vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
-        final_output = vertical_spacing + sample_text + vertical_spacing + fit_report + vertical_spacing + data_text
+        report_total = vertical_spacing + sample_text + vertical_spacing +\
+                 report_fit + vertical_spacing + data_text
 
-        return final_output
+        return report_total
 
 
-
-
-    def save_report (self, report):
+    def save_report(self, report):
         if self.report_name == "":
-            self.report_name = "fit_report.txt"
+            self.report_name = "report_fit.txt"
         report_file = open(self.report_name, "w")
         report_file.write(report)
         report_file.close()
 
 
-    def run_fit(self, print_derivatives=False):
-        ## Start Ray
-        if self.ray_init_auto == True:
-            self.ray_init()
-
-        self.generate_workers()
-        print("--- Pool of "
-              + str(self._nb_workers)
-              + " workers for "
-              + str(cpu_count(logical=False))
-              + " cores ---")
-
-        ## Start Stopwatch
-        t0 = time.time()
-        ## Run fit algorithm
-        out = differential_evolution(self.polish_func, bounds=self.bounds,
-                                    workers=self.map, updating=self.updating,
-                                    polish=self.polish,
-                                    maxiter=self.N_generation,
-                                    popsize=self.population,
-                                    mutation=self.mutation,
-                                    recombination=self.crossing,
-                                    tol=self.tolerance
-                                    )
-        self.out = out
-        self.fit_duration = time.time() - t0
-
-        ## Export final parameters from the fit
-        for i, free_name in enumerate(self.free_pars_name):
-            self.best_pars[free_name] = out.x[i]
-            self.rus_object.cij_dict[free_name] = out.x[i]
-
-        ## Close COMSOL for each workers
-        self.close_workers()
-
-        ## Stop Ray
-        ray.shutdown()
-
-        ## Fit report
-        if print_derivatives == False:
-            vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
-            report = vertical_spacing
-            report += self.print_fit_report()
-            report += vertical_spacing
-            report += self.print_best_frequencies()
-            print (report)
-        else:
-            report = self.print_final_output()
-            print (report)
-        self.save_report(report)
-
-
-        return self.rus_object

@@ -23,8 +23,9 @@ class RUSRPR(ElasticConstants):
                          angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
 
         self.mass       = mass # mass of the sample
-        self.density    = mass / np.prod(np.array(dimensions))
         self.dimensions = np.array(dimensions) # in meters
+        self.density    = mass / np.prod(self.dimensions)
+
 
         self.order      = order # order of the highest polynomial used to calculate the resonacne frequencies
         self.N          = int((order+1)*(order+2)*(order+3)/6) # this is the number of basis functions
@@ -145,7 +146,6 @@ class RUSRPR(ElasticConstants):
         return Gmat
 
 
-
     def compute_resonances(self, eigvals_only=True):
         """
         calculates resonance frequencies in Hz;
@@ -203,12 +203,12 @@ class RUSRPR(ElasticConstants):
             return log_derivative
 
 
-    
-    def print_logarithmic_derivative (self, print_frequencies=True):
+
+    def print_logarithmic_derivative(self, print_frequencies=True):
         print ('start taking derivatives ...')
         if self.Emat is None:
             self.initialize()
-        
+
         log_der, freqs_calc = self.log_derivatives_analytical(return_freqs=True)
 
         cij = deepcopy(sorted(self.cij_dict))
@@ -238,7 +238,7 @@ class RUSRPR(ElasticConstants):
                 total_text = total_text + freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
         else:
             total_text = der_text
-        
+
         return total_text
 
 
