@@ -5,6 +5,7 @@ import time
 from copy import deepcopy
 import os
 import sys
+from IPython.display import clear_output
 import ray
 from psutil import cpu_count
 from rus_comsol.rus_comsol import RUSComsol
@@ -235,7 +236,7 @@ class RUSFitting:
         freqs_sim_list = self.pool.map(self.update_worker, iterable)
         chi2 = self.compute_chi2(list(freqs_sim_list))
         ## Print End Generation
-        os.system('cls')
+        clear_output(wait=True)
         print("Gen "
               + str(self.nb_gens) + ":: Pop "
               + str(self.population * len(self.free_pars_name))
@@ -248,9 +249,9 @@ class RUSFitting:
                   + r"{0:.3f}".format(self.best_pars[free_name])
                   + " "
                   + " ")
-        print("Missing frequencies --- ", self.best_freqs_missing, " MHz\n")
+        print("Missing frequencies --- ", self.best_freqs_missing[self.best_index_missing < self.freqs_data.size], " MHz\n")
         ## Save the report of the best parameters
-        v_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+        v_spacing = '#' + '-'*(79) + '\n'
         report  = self.report_best_pars()
         report += v_spacing
         report += self.report_best_freqs()
@@ -305,13 +306,14 @@ class RUSFitting:
         ## Stop Ray
         ray.shutdown()
         ## Fit report
+        clear_output(wait=True)
         if print_derivatives == False:
-            v_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
-            report  = self.report_fit()
-            report += self.report_best_pars()
+            v_spacing = '#' + '-'*(79) + '\n'
+            report  = self.report_best_pars()
             report += v_spacing
             report += self.report_best_freqs()
-            print(v_spacing + report)
+            report += self.report_fit()
+            print(report)
         else:
             report = self.report_total()
             print(report)
@@ -320,20 +322,20 @@ class RUSFitting:
 
 
     def report_best_pars(self):
-        report = "#[[Variables]]" + "\n"
+        report = "#Variables" + '-'*(70) + '\n'
         for free_name in self.free_pars_name:
             report+= "\t# " + free_name + " : " + r"{0:.3f}".format(self.best_pars[free_name]) + " " + \
                      " unit " + \
                      " (init = [" + str(self.bounds_dict[free_name]) + \
                      ", " +         "unit" + "])" + "\n"
-        report+= "#[[Fixed values]]" + "\n"
+        report+= "#Fixed values" + '-'*(67) + '\n'
         for fixed_name in self.fixed_pars_name:
             report+= "\t# " + fixed_name + " : " + \
                      r"{0:.8f}".format(self.best_pars[fixed_name]) + " " + \
                      " unit " + "\n"
-        report += "#[[Missing frequencies]]\n"
-        for freqs_missing in self.best_freqs_missing:
-            report += "# " + r"{0:.4f}".format(freqs_missing) + " MHz\n"
+        report += "#Missing frequencies" + '-'*(60) + '\n'
+        for freqs_missing in self.best_freqs_missing[self.best_index_missing < self.freqs_data.size]:
+            report += "\t# " + r"{0:.4f}".format(freqs_missing) + " MHz\n"
         return report
 
 
@@ -344,7 +346,7 @@ class RUSFitting:
         N_variables = len(fit_output.x)
         chi2 = fit_output.fun
         reduced_chi2 = chi2 / (N_points - N_variables)
-        report = "#[[Fit Statistics]]" + "\n"
+        report = "#Fit Statistics" + '-'*(65) + '\n'
         report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
         report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
@@ -368,29 +370,22 @@ class RUSFitting:
             index_missing = self.sort_freqs(freqs_sim)[-1]
         else:
             freqs_found   = self.best_freqs_found
-            print(freqs_found)
+            # print(freqs_found)
             index_found   = self.best_index_found
-            print(index_found)
+            # print(index_found)
             freqs_missing = self.best_freqs_missing
-            print(freqs_missing)
+            # print(freqs_missing)
             index_missing = self.best_index_missing
-            print(index_missing)
-            print(len(freqs_found) + len(freqs_missing))
+            # print(index_missing)
+            # print(len(freqs_found) + len(freqs_missing))
             freqs_sim = np.empty(len(freqs_found) + len(freqs_missing))
-            print(freqs_sim.size)
+            # print(freqs_sim.size)
             freqs_sim[index_found]   = freqs_found
             freqs_sim[index_missing] = freqs_missing
-            # print('OK')
-            # for i in index_missing:
-            #     freqs_sim  = np.insert(freqs_sim, i, freqs_missing[i])
-            #     print('OK ' + str(i))
 
-        # freqs_data = np.zeros_like(len(freqs_sim))
         freqs_data = np.empty(len(freqs_found) + len(freqs_missing))
         freqs_data[index_found] = self.freqs_data
         freqs_data[index_missing] = 0
-        # for i in index_missing:
-        #     freqs_data = np.insert(self.freqs_data, i, 0)
 
         diff = np.zeros_like(freqs_data)
         for i in range(len(freqs_data)):
@@ -400,15 +395,15 @@ class RUSFitting:
 
         template = "{0:<8}{1:<13}{2:<13}{3:<13}"
         report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)']) + '\n'
-        report += '#' + '-'*(8+13+13+13) + '\n'
+        report += '#' + '-'*(79) + '\n'
         for j in range(len(freqs_sim)):
             if j < len(freqs_data):
                 report+= template.format(*[j, round(freqs_data[j],6), round(freqs_sim[j],6), round(diff[j], 3)]) + '\n'
             else:
                 report+= template.format(*[j, '', round(freqs_sim[j],6)], '') + '\n'
-        report += '#' + '-'*(8+13+13+13) + '\n'
+        report += '#' + '-'*(79) + '\n'
         report += '# RMS = ' + str(round(rms,3)) + ' %\n'
-        report += '#' + '-'*(8+13+13+13) + '\n'
+        report += '#' + '-'*(79) + '\n'
 
         return report
 
