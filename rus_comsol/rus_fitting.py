@@ -3,6 +3,7 @@ from scipy.spatial import distance_matrix
 from scipy.optimize import differential_evolution, linear_sum_assignment
 import time
 from copy import deepcopy
+import os
 import sys
 import ray
 from psutil import cpu_count
@@ -68,9 +69,10 @@ class RUSFitting:
         ## Empty spaces
         self.best_chi2 = None
         self.nb_gens   = 0
-        self.best_freqs_calc = []
-        self.best_index_missing = []
+        self.best_freqs_found   = []
+        self.best_index_found   = []
         self.best_freqs_missing = []
+        self.best_index_missing = []
 
         ## empty spaces for fit properties
         self.fit_output = None
@@ -116,50 +118,55 @@ class RUSFitting:
         in case there is one or more missing frequencies in the data
         """
         cost_matrix = distance_matrix(freqs_data[:, None], freqs_sim[:, None])**2
-        index_sim = linear_sum_assignment(cost_matrix)[1]
+        index_found = linear_sum_assignment(cost_matrix)[1]
         ## sim_index is the indices for freqs_sim to match freqs_data
-        return index_sim, freqs_sim[index_sim]
+        return index_found, freqs_sim[index_found]
 
 
-    def sort_freqs(self, freqs_sim_calc):
+    def sort_freqs(self, freqs_sim):
         if self.nb_max_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
-            index_sim, freqs_sim = self.assignement(self.freqs_data,
-                                                    freqs_sim_calc)
+            index_found, freqs_found = self.assignement(self.freqs_data, freqs_sim)
             ## Give the missing frequencies in the data -------------------------
             # Let's remove the extra simulated frequencies that are beyond
             # the list of data frequencies
-            bool_missing = np.ones(freqs_sim_calc.size, dtype=bool)
-            bool_missing[index_sim] = False
-            index_missing = np.arange(0, freqs_sim_calc.size, 1)[bool_missing]
-            index_missing = index_missing[index_missing < self.freqs_data.size]
-            freqs_missing = freqs_sim_calc[index_missing]
+            bool_missing = np.ones(freqs_sim.size, dtype=bool)
+            bool_missing[index_found] = False
+            index_missing = np.arange(0, freqs_sim.size, 1)[bool_missing]
+            # index_missing = index_missing[index_missing < self.freqs_data.size]
+            freqs_missing = freqs_sim[index_missing]
         else:
             ## Only select the first number of "freq to compare"
-            freqs_sim = freqs_sim_calc[:self.nb_freqs]
+            freqs_found = freqs_sim[:self.nb_freqs]
+            index_found = np.arange(len(freqs_found))
             freqs_missing = []
             index_missing = []
-        return freqs_sim, freqs_missing, index_missing
+        return freqs_found, index_found, freqs_missing, index_missing
 
 
-    def compute_chi2(self, freqs_calc_list):
+    def compute_chi2(self, freqs_sim_list):
         ## Remove the useless small frequencies
-        chi2 = np.empty(len(freqs_calc_list), dtype=np.float64)
+        chi2 = np.empty(len(freqs_sim_list), dtype=np.float64)
+        freqs_found_list   = []
+        index_found_list   = []
         freqs_missing_list = []
         index_missing_list = []
-        for i, freqs_calc in enumerate(freqs_calc_list):
-            freqs_sim, freqs_missing, index_missing = self.sort_freqs(freqs_calc)
+        for i, freqs_sim in enumerate(freqs_sim_list):
+            freqs_found, index_found, freqs_missing, index_missing = self.sort_freqs(freqs_sim)
+            freqs_found_list.append(freqs_found)
+            index_found_list.append(index_found)
             freqs_missing_list.append(freqs_missing)
             index_missing_list.append(index_missing)
-            chi2[i] = np.sum((freqs_sim - self.freqs_data)**2)
+            chi2[i] = np.sum((freqs_found - self.freqs_data)**2)
         ## Best parameters for lowest chi2
         index_best = np.argmin(chi2)
         if self.best_chi2 == None or self.best_chi2 > chi2[index_best]:
             self.best_chi2 = chi2[index_best]
             for i, free_name in enumerate(self.free_pars_name):
                 self.best_pars[free_name] = self.last_gen[index_best][i]
+            self.best_freqs_found   = freqs_found_list[index_best]
+            self.best_index_found   = index_found_list[index_best]
             self.best_freqs_missing = freqs_missing_list[index_best]
-            self.best_freqs_calc = freqs_calc_list[index_best]
             self.best_index_missing = index_missing_list[index_best]
         return chi2
 
@@ -225,9 +232,10 @@ class RUSFitting:
         """
         self.last_gen = deepcopy(iterable)
         start_total_time = time.time()
-        freqs_calc_list = self.pool.map(self.update_worker, iterable)
-        chi2 = self.compute_chi2(list(freqs_calc_list))
+        freqs_sim_list = self.pool.map(self.update_worker, iterable)
+        chi2 = self.compute_chi2(list(freqs_sim_list))
         ## Print End Generation
+        os.system('cls')
         print("Gen "
               + str(self.nb_gens) + ":: Pop "
               + str(self.population * len(self.free_pars_name))
@@ -241,12 +249,18 @@ class RUSFitting:
                   + " "
                   + " ")
         print("Missing frequencies --- ", self.best_freqs_missing, " MHz\n")
+        ## Save the report of the best parameters
+        v_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+        report  = self.report_best_pars()
+        report += v_spacing
+        report += self.report_best_freqs()
+        self.save_report(report)
         return chi2
 
 
     def polish_func(self, single_value):
-        freqs_calc_list = self.pool.map(self.update_worker, single_value)
-        chi2 = self.compute_chi2(list(freqs_calc_list))
+        freqs_sim_list = self.pool.map(self.update_worker, single_value)
+        chi2 = self.compute_chi2(list(freqs_sim_list))
         return chi2[0]
 
 
@@ -262,14 +276,12 @@ class RUSFitting:
         ## Start Ray
         if self.ray_init_auto == True:
             self.ray_init()
-
         self.generate_workers()
         print("--- Pool of "
               + str(self._nb_workers)
               + " workers for "
               + str(cpu_count(logical=False))
               + " cores ---")
-
         ## Start Stopwatch
         t0 = time.time()
         ## Run fit algorithm
@@ -284,36 +296,49 @@ class RUSFitting:
                                     )
         self.fit_output = fit_output
         self.fit_duration = time.time() - t0
-
         ## Export final parameters from the fit
         for i, free_name in enumerate(self.free_pars_name):
             self.best_pars[free_name] = fit_output.x[i]
             self.rus_object.cij_dict[free_name] = fit_output.x[i]
-
         ## Close COMSOL for each workers
         self.close_workers()
-
         ## Stop Ray
         ray.shutdown()
-
         ## Fit report
         if print_derivatives == False:
-            vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
-            report = vertical_spacing
-            report += self.report_fit()
-            report += vertical_spacing
+            v_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+            report  = self.report_fit()
+            report += self.report_best_pars()
+            report += v_spacing
             report += self.report_best_freqs()
-            print(report)
+            print(v_spacing + report)
         else:
             report = self.report_total()
             print(report)
         self.save_report(report)
-
         return self.rus_object
 
 
+    def report_best_pars(self):
+        report = "#[[Variables]]" + "\n"
+        for free_name in self.free_pars_name:
+            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(self.best_pars[free_name]) + " " + \
+                     " unit " + \
+                     " (init = [" + str(self.bounds_dict[free_name]) + \
+                     ", " +         "unit" + "])" + "\n"
+        report+= "#[[Fixed values]]" + "\n"
+        for fixed_name in self.fixed_pars_name:
+            report+= "\t# " + fixed_name + " : " + \
+                     r"{0:.8f}".format(self.best_pars[fixed_name]) + " " + \
+                     " unit " + "\n"
+        report += "#[[Missing frequencies]]\n"
+        for freqs_missing in self.best_freqs_missing:
+            report += "# " + r"{0:.4f}".format(freqs_missing) + " MHz\n"
+        return report
+
+
     def report_fit(self):
-        fit_output = self.fit_output
+        fit_output  = self.fit_output
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
         N_variables = len(fit_output.x)
@@ -329,75 +354,73 @@ class RUSFitting:
         report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
         report+= "\t# chi-square         \t= " + r"{0:.8f}".format(chi2) + "\n"
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
-        report+= "#[[Variables]]" + "\n"
-        for i, free_name in enumerate(self.free_pars_name):
-            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(fit_output.x[i]) + " " + \
-                     " unit " + \
-                     " (init = [" + str(self.bounds_dict[free_name]) + \
-                     ", " +         "unit" + "])" + "\n"
-        report+= "#[[Fixed values]]" + "\n"
-        for fixed_pars_name in self.fixed_pars_name:
-            report+= "\t# " + fixed_pars_name + " : " + \
-                     r"{0:.8f}".format(self.best_pars[fixed_pars_name]) + " " + \
-                     " unit " + "\n"
+        return report
 
-        report += "#[[Missing frequencies]]\n"
-        for freqs_missing in self.best_freqs_missing:
-            report += r"{0:.4f}".format(freqs_missing) + " MHz\n"
+
+    def report_best_freqs(self, nb_additional_freqs=0):
+        if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
+            if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
+                self.rus_object.start_comsol()
+            if isinstance(self.rus_object, RUSRPR) and (self.rus_object.Emat is None):
+                self.rus_object.initialize()
+            self.rus_object.nb_freq = self.nb_freqs + len(self.best_index_missing) + nb_additional_freqs
+            freqs_sim = self.rus_object.compute_resonances()
+            index_missing = self.sort_freqs(freqs_sim)[-1]
+        else:
+            freqs_found   = self.best_freqs_found
+            print(freqs_found)
+            index_found   = self.best_index_found
+            print(index_found)
+            freqs_missing = self.best_freqs_missing
+            print(freqs_missing)
+            index_missing = self.best_index_missing
+            print(index_missing)
+            print(len(freqs_found) + len(freqs_missing))
+            freqs_sim = np.empty(len(freqs_found) + len(freqs_missing))
+            print(freqs_sim.size)
+            freqs_sim[index_found]   = freqs_found
+            freqs_sim[index_missing] = freqs_missing
+            # print('OK')
+            # for i in index_missing:
+            #     freqs_sim  = np.insert(freqs_sim, i, freqs_missing[i])
+            #     print('OK ' + str(i))
+
+        # freqs_data = np.zeros_like(len(freqs_sim))
+        freqs_data = np.empty(len(freqs_found) + len(freqs_missing))
+        freqs_data[index_found] = self.freqs_data
+        freqs_data[index_missing] = 0
+        # for i in index_missing:
+        #     freqs_data = np.insert(self.freqs_data, i, 0)
+
+        diff = np.zeros_like(freqs_data)
+        for i in range(len(freqs_data)):
+            if freqs_data[i] != 0:
+                diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_data[i] * 100
+        rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0]))
+
+        template = "{0:<8}{1:<13}{2:<13}{3:<13}"
+        report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)']) + '\n'
+        report += '#' + '-'*(8+13+13+13) + '\n'
+        for j in range(len(freqs_sim)):
+            if j < len(freqs_data):
+                report+= template.format(*[j, round(freqs_data[j],6), round(freqs_sim[j],6), round(diff[j], 3)]) + '\n'
+            else:
+                report+= template.format(*[j, '', round(freqs_sim[j],6)], '') + '\n'
+        report += '#' + '-'*(8+13+13+13) + '\n'
+        report += '# RMS = ' + str(round(rms,3)) + ' %\n'
+        report += '#' + '-'*(8+13+13+13) + '\n'
 
         return report
 
 
-    def report_best_freqs(self, freqs_calc=None, nb_additional_freqs=10, comsol_start=False):
-        freqs_data = np.array(self.load_data())
-
-        self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing + nb_additional_freqs
-        if freqs_calc is None:
-            if isinstance(self.rus_object, RUSComsol):
-                if comsol_start == True:
-                    self.rus_object.start_comsol()
-                    freqs_calc = np.array(self.rus_object.compute_resonances())
-                else:
-                    freqs_calc = np.array(self.rus_object.compute_resonances())
-            if isinstance(self.rus_object, RUSRPR):
-                if self.rus_object.Emat is None:
-                    self.rus_object.initialize()
-                freqs_calc = np.array(self.rus_object.compute_resonances())
-        self.rus_object.nb_freq = self.nb_freqs+self.nb_max_missing
-
-        index_missing = self.best_index_missing
-        for idx in index_missing:
-            freqs_data = np.insert(freqs_data, idx, 0)
-
-        diff = np.zeros(len(freqs_data))
-        for idx in np.arange(len(freqs_data)):
-            if freqs_data[idx] != 0:
-                diff[idx] = abs(freqs_data[idx]-freqs_calc[idx]) / freqs_data[idx] * 100
-        rms = sum(diff[diff!=0]**2) / len(diff[diff!=0])
-
-        template = "{0:<8}{1:<13}{2:<13}{3:<13}"
-        compare_text = template.format(*['index', 'freq exp', 'freq calc', 'diff (%)']) + '\n'
-        compare_text = compare_text + template.format(*['', '(MHz)', '(MHz)', '']) + '\n'
-        compare_text = compare_text + '-'*(8+13+13+13) + '\n'
-        for ii in np.arange(len(freqs_calc)):
-            if ii < len(freqs_data):
-                compare_text+= template.format(*[ii, round(freqs_data[ii],6), round(freqs_calc[ii],6), round(diff[ii], 3)]) + '\n'
-            else:
-                compare_text+= template.format(*[ii, '', round(freqs_calc[ii],6)], '') + '\n'
-        compare_text = compare_text + '-'*(6+13+13+10) + '\n'
-        compare_text = compare_text + 'RMS = ' + str(round(rms,3)) + ' %\n'
-        compare_text = compare_text + '-'*(6+13+13+10) + '\n'
-
-        return compare_text
-
-
     def report_total(self, comsol_start=True):
         report_fit = self.report_fit()
+        report_fit += self.report_best_pars()
         if isinstance(self.rus_object, RUSRPR):
             freq_text  = self.report_best_freqs(nb_additional_freqs=10)
             der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False)
         if isinstance(self.rus_object, RUSComsol):
-            freq_text  = self.report_best_freqs(nb_additional_freqs=10, comsol_start=comsol_start)
+            freq_text  = self.report_best_freqs(nb_additional_freqs=10)
             der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False, comsol_start=False)
             self.rus_object.stop_comsol()
 
@@ -414,22 +437,22 @@ class RUSFitting:
             sample_text += sample_template.format(*['resonance frequencies calculated with:', 'Comsol']) + '\n'
 
         data_text = ''
-        for ii in np.arange(len(freq_text.split('\n'))):
-            if ii < len(der_text.split('\n')):
-                data_text += freq_text.split('\n')[ii] + der_text.split('\n')[ii] + '\n'
+        for j in np.arange(len(freq_text.split('\n'))):
+            if j < len(der_text.split('\n')):
+                data_text += freq_text.split('\n')[j] + der_text.split('\n')[j] + '\n'
             else:
-                data_text += freq_text.split('\n')[ii] + '\n'
+                data_text += freq_text.split('\n')[j] + '\n'
 
-        vertical_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
-        report_total = vertical_spacing + sample_text + vertical_spacing +\
-                 report_fit + vertical_spacing + data_text
+        v_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+        report_total = v_spacing + sample_text + v_spacing +\
+                 report_fit + v_spacing + data_text
 
         return report_total
 
 
     def save_report(self, report):
         if self.report_name == "":
-            self.report_name = "report_fit.txt"
+            self.report_name = "fit_report.txt"
         report_file = open(self.report_name, "w")
         report_file.write(report)
         report_file.close()

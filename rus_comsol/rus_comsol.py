@@ -60,7 +60,8 @@ class RUSComsol(ElasticConstants):
 
     def stop_comsol(self):
         self.client.clear()
-
+        self.client = None
+        self.model  = None
 
 
     def log_derivatives_numerical (self, dc=1e-4, N=5, Rsquared_threshold=1e-5, return_freqs=False):
