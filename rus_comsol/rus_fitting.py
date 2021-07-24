@@ -249,7 +249,7 @@ class RUSFitting:
                   + r"{0:.3f}".format(self.best_pars[free_name])
                   + " "
                   + " ")
-        print("Missing frequencies --- ", self.best_freqs_missing[self.best_index_missing < self.freqs_data.size], " MHz\n")
+        print("Missing frequencies --- ", self.best_freqs_missing, " MHz\n")
         ## Save the report of the best parameters
         v_spacing = '#' + '-'*(79) + '\n'
         report  = self.report_best_pars()
@@ -324,18 +324,23 @@ class RUSFitting:
     def report_best_pars(self):
         report = "#Variables" + '-'*(70) + '\n'
         for free_name in self.free_pars_name:
+            if free_name[0] == "c": unit = "GPa"
+            else: unit = "deg"
             report+= "\t# " + free_name + " : " + r"{0:.3f}".format(self.best_pars[free_name]) + " " + \
-                     " unit " + \
+                     unit + \
                      " (init = [" + str(self.bounds_dict[free_name]) + \
-                     ", " +         "unit" + "])" + "\n"
+                     ", " +         unit + "])" + "\n"
         report+= "#Fixed values" + '-'*(67) + '\n'
-        for fixed_name in self.fixed_pars_name:
-            report+= "\t# " + fixed_name + " : " + \
-                     r"{0:.8f}".format(self.best_pars[fixed_name]) + " " + \
-                     " unit " + "\n"
-        report += "#Missing frequencies" + '-'*(60) + '\n'
-        for freqs_missing in self.best_freqs_missing[self.best_index_missing < self.freqs_data.size]:
-            report += "\t# " + r"{0:.4f}".format(freqs_missing) + " MHz\n"
+        if len(self.fixed_pars_name) == 0:
+            report += "\t# " + "None" + "\n"
+        else:
+            for fixed_name in self.fixed_pars_name:
+                report+= "\t# " + fixed_name + " : " + \
+                        r"{0:.8f}".format(self.best_pars[fixed_name]) + " " + \
+                        unit + "\n"
+        # report += "#Missing frequencies" + '-'*(60) + '\n'
+        # for freqs_missing in self.best_freqs_missing:
+        #     report += "\t# " + r"{0:.4f}".format(freqs_missing) + " MHz\n"
         return report
 
 
@@ -343,16 +348,16 @@ class RUSFitting:
         fit_output  = self.fit_output
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
-        N_variables = len(fit_output.x)
+        N_variables = len(self.bounds)
         chi2 = fit_output.fun
         reduced_chi2 = chi2 / (N_points - N_variables)
         report = "#Fit Statistics" + '-'*(65) + '\n'
-        report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
-        report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
-        report+= "\t# function evals     \t= " + str(fit_output.nfev) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
         report+= "\t# variables          \t= " + str(N_variables) + "\n"
+        report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
+        report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
+        report+= "\t# function evals     \t= " + str(fit_output.nfev) + "\n"
         report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
         report+= "\t# chi-square         \t= " + r"{0:.8f}".format(chi2) + "\n"
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
