@@ -31,11 +31,12 @@ class RUSFitting:
         self.bounds_dict = bounds_dict
 
         ## Load data
-        self.nb_freqs       = nb_freqs
-        self.nb_max_missing = nb_max_missing
-        self.freqs_file     = freqs_file
-        self.col_freqs      = 0
-        self.freqs_data     = self.load_data(nb_freqs)
+        self.nb_freqs        = nb_freqs
+        self.nb_max_missing  = nb_max_missing
+        self.freqs_file      = freqs_file
+        self.col_freqs       = 0
+        self.col_weight      = 1
+        self.freqs_data, self.weight = self.load_data(nb_freqs)
         self.free_pars_name  = sorted(self.bounds_dict.keys())
         self.fixed_pars_name = np.setdiff1d(sorted(self.init_pars.keys()),
                                              self.free_pars_name)
@@ -99,9 +100,13 @@ class RUSFitting:
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
-        freqs_data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
-        if freqs_data.size is tuple:
-            freqs_data = freqs_data[:,self.col_freqs]
+        data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
+        if data.size is tuple:
+            freqs_data = data[:,self.col_freqs]
+            weight     = data[:,self.col_weight]
+        else:
+            freqs_data = data
+            weight     = np.ones_like(freqs)
         ## Only select the first number of "freq to compare"
         if nb_freqs == 'all':
             self.nb_freqs = len(freqs_data)
@@ -110,7 +115,7 @@ class RUSFitting:
         except AssertionError:
             print("You need --- nb calculated freqs <= nb data freqs")
             sys.exit(1)
-        return freqs_data[:self.nb_freqs]
+        return freqs_data[:self.nb_freqs], weight[:self.nb_freqs]
 
 
     def assignement(self, freqs_data, freqs_sim):
@@ -158,7 +163,7 @@ class RUSFitting:
             index_found_list.append(index_found)
             freqs_missing_list.append(freqs_missing)
             index_missing_list.append(index_missing)
-            chi2[i] = np.sum((freqs_found - self.freqs_data)**2)
+            chi2[i] = np.sum((freqs_found - self.freqs_data)**2 * self.weight)
         ## Best parameters for lowest chi2
         index_best = np.argmin(chi2)
         if self.best_chi2 == None or self.best_chi2 > chi2[index_best]:
