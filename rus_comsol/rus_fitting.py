@@ -36,7 +36,9 @@ class RUSFitting:
         self.freqs_file      = freqs_file
         self.col_freqs       = 0
         self.col_weight      = 1
-        self.freqs_data, self.weight = self.load_data(nb_freqs)
+        self.freqs_data = None
+        self.weight = None
+        self.load_data()
         self.free_pars_name  = sorted(self.bounds_dict.keys())
         self.fixed_pars_name = np.setdiff1d(sorted(self.init_pars.keys()),
                                              self.free_pars_name)
@@ -95,27 +97,29 @@ class RUSFitting:
 
 
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    def load_data(self, nb_freqs = 'all'):
+    def load_data(self):
         """
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
         data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
-        if data.size is tuple:
+        if len(data.shape) > 1:
             freqs_data = data[:,self.col_freqs]
-            weight     = data[:,self.col_weight]
+            weight     = np.ones_like(freqs_data)
+            # weight     = data[:,self.col_weight]
         else:
             freqs_data = data
-            weight     = np.ones_like(freqs)
+            weight     = np.ones_like(freqs_data)
         ## Only select the first number of "freq to compare"
-        if nb_freqs == 'all':
+        if self.nb_freqs == 'all':
             self.nb_freqs = len(freqs_data)
         try:
             assert self.nb_freqs <= freqs_data.size
         except AssertionError:
             print("You need --- nb calculated freqs <= nb data freqs")
             sys.exit(1)
-        return freqs_data[:self.nb_freqs], weight[:self.nb_freqs]
+        self.freqs_data = freqs_data[:self.nb_freqs]
+        self.weight = weight[:self.nb_freqs]
 
 
     def assignement(self, freqs_data, freqs_sim):
@@ -163,7 +167,7 @@ class RUSFitting:
             index_found_list.append(index_found)
             freqs_missing_list.append(freqs_missing)
             index_missing_list.append(index_missing)
-            chi2[i] = np.sum((freqs_found - self.freqs_data)**2 * self.weight)
+            chi2[i] = np.sum(((freqs_found - self.freqs_data)/freqs_found)**2 * self.weight)
         ## Best parameters for lowest chi2
         index_best = np.argmin(chi2)
         if self.best_chi2 == None or self.best_chi2 > chi2[index_best]:
@@ -185,6 +189,7 @@ class RUSFitting:
                 worker = ray.remote(RUSComsol).remote(cij_dict=self.rus_object.cij_dict,
                                         symmetry=self.rus_object.symmetry,
                                         mph_file=self.rus_object.mph_file,
+                                        density=self.rus_object.density,
                                         nb_freq=self.nb_freqs+self.nb_max_missing,
                                         angle_x=self.rus_object.angle_x,
                                         angle_y=self.rus_object.angle_y,
@@ -340,6 +345,8 @@ class RUSFitting:
             report += "\t# " + "None" + "\n"
         else:
             for fixed_name in self.fixed_pars_name:
+                if free_name[0] == "c": unit = "GPa"
+                else: unit = "deg"
                 report+= "\t# " + fixed_name + " : " + \
                         r"{0:.8f}".format(self.best_pars[fixed_name]) + " " + \
                         unit + "\n"
@@ -397,18 +404,22 @@ class RUSFitting:
         freqs_data[index_found] = self.freqs_data
         freqs_data[index_missing] = 0
 
+        weight = np.empty(len(freqs_found) + len(freqs_missing))
+        weight[index_found] = self.weight
+        weight[index_missing] = 0
+
         diff = np.zeros_like(freqs_data)
         for i in range(len(freqs_data)):
             if freqs_data[i] != 0:
-                diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_data[i] * 100
+                diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_data[i] * 100 * weight[i]
         rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0]))
 
-        template = "{0:<8}{1:<13}{2:<13}{3:<13}"
-        report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)']) + '\n'
+        template = "{0:<8}{1:<13}{2:<13}{3:<13}{4:<8}"
+        report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)', 'weight']) + '\n'
         report += '#' + '-'*(79) + '\n'
         for j in range(len(freqs_sim)):
             if j < len(freqs_data):
-                report+= template.format(*[j, round(freqs_data[j],6), round(freqs_sim[j],6), round(diff[j], 3)]) + '\n'
+                report+= template.format(*[j, round(freqs_data[j],6), round(freqs_sim[j],6), round(diff[j], 3), round(weight[j], 0)]) + '\n'
             else:
                 report+= template.format(*[j, '', round(freqs_sim[j],6)], '') + '\n'
         report += '#' + '-'*(79) + '\n'

@@ -7,7 +7,8 @@ from rus_comsol.elastic_constants import ElasticConstants
 class RUSRPR(ElasticConstants):
     def __init__(self, cij_dict, symmetry,
                  mass, dimensions,
-                 order, nb_freq,
+                 order,
+                 nb_freq=1,
                  angle_x=0, angle_y=0, angle_z=0,
                  init=False):
         """

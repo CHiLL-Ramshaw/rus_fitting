@@ -8,31 +8,45 @@ from time import time
 
 class RUSComsol(ElasticConstants):
     def __init__(self, cij_dict, symmetry,
-                 mph_file,
-                 nb_freq,
+                 density, mph_file,
+                 nb_freq=1, mesh=5,
                  angle_x=0, angle_y=0, angle_z=0,
                  study_name="resonances",
                  study_tag="std1",
                  init=False):
+        """
+        density: expressed in kg/m^3
+        mesh: goes from 1 for Extremely fine to 9 for Extremely coarse
+        """
         super().__init__(cij_dict,
                          symmetry=symmetry,
                          angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
         self.mph_file   = mph_file
         self.study_name = study_name
         self.study_tag  = study_tag
-        self._nb_freq   = nb_freq
+        self.nb_freq    = nb_freq
         self.client     = None
         self.model      = None
         self.freqs      = None
+        self._density   = density # in kg/m^3
+        self._mesh       = mesh
         if init == True:
             self.start_comsol()
 
     ## Properties >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    def _get_nb_freq(self):
-        return self._nb_freq
-    def _set_nb_freq(self, nb_freq):
-        self._nb_freq = nb_freq
-    nb_freq = property(_get_nb_freq, _set_nb_freq)
+    def _get_density(self):
+        return self._density
+    def _set_density(self, density):
+        self._density = density
+        self.model.parameter('rho', str(self._density) + " [kg/m^3]")
+    density = property(_get_density, _set_density)
+
+    def _get_mesh(self):
+        return self._mesh
+    def _set_mesh(self, mesh):
+        self._mesh = mesh
+        self.model.java.component('comp1').mesh("mesh1").autoMeshSize(self._mesh)
+    mesh = property(_get_mesh, _set_mesh)
 
 
     def compute_resonances(self):
@@ -56,6 +70,11 @@ class RUSComsol(ElasticConstants):
         ## Forces to get all the resonances from 0 MHz
         self.model.java.study(self.study_tag).feature("eig").set('shiftactive', 'on')
         self.model.java.study(self.study_tag).feature("eig").set('shift', '0')
+        ## Set density ----------------------------------------------------------
+        self.model.parameter('rho', str(self._density) + " [kg/m^3]")
+        ## Set Mesh -------------------------------------------------------------
+        self.model.java.component('comp1').mesh("mesh1").automatic(True)
+        self.model.java.component('comp1').mesh("mesh1").autoMeshSize(self._mesh)
 
 
     def stop_comsol(self):
