@@ -149,7 +149,7 @@ class RUSRPR(ElasticConstants):
 
     def compute_resonances(self, eigvals_only=True):
         """
-        calculates resonance frequencies in Hz;
+        calculates resonance frequencies in MHz;
         pars: dictionary of elastic constants
         nb_freq: number of elastic constants to be displayed
         eigvals_only (True/False): gets only eigenvalues (i.e. resonance frequencies) or also gives eigenvectors (the latter is important when we want to calculate derivatives)
