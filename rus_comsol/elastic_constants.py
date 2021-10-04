@@ -133,7 +133,7 @@ class ElasticConstants:
                 voigt_matrix[5,5] = (self.cij_dict['c11']-self.cij_dict['c12'])/2
             else:
                 voigt_matrix[0,0] = 2*self.cij_dict['c66'] + self.cij_dict['c12']
-                voigt_matrix[1,1] = self.cij_dict['c11']
+                voigt_matrix[1,1] = 2*self.cij_dict['c66'] + self.cij_dict['c12']
                 voigt_matrix[2,2] = self.cij_dict['c33']
                 voigt_matrix[0,1] = self.cij_dict['c12']
                 voigt_matrix[0,2] = self.cij_dict['c13']
@@ -141,6 +141,36 @@ class ElasticConstants:
                 voigt_matrix[3,3] = self.cij_dict['c44']
                 voigt_matrix[4,4] = self.cij_dict['c44']
                 voigt_matrix[5,5] = self.cij_dict['c66']
+
+        elif self.symmetry=="rhombohedral":
+            # rhomnohedral symmetry is special, as it contains a non-zero c14!
+            indicator = np.any( np.array([i=='c11' for i in self.cij_dict]) )
+            if indicator == True:
+                voigt_matrix[0,0] = self.cij_dict['c11']
+                voigt_matrix[1,1] = self.cij_dict['c11']
+                voigt_matrix[2,2] = self.cij_dict['c33']
+                voigt_matrix[0,1] = self.cij_dict['c12']
+                voigt_matrix[0,2] = self.cij_dict['c13']
+                voigt_matrix[1,2] = self.cij_dict['c13']
+                voigt_matrix[3,3] = self.cij_dict['c44']
+                voigt_matrix[4,4] = self.cij_dict['c44']
+                voigt_matrix[5,5] = (self.cij_dict['c11']-self.cij_dict['c12'])/2
+                voigt_matrix[0,3] = self.cij_dict['c14']
+                voigt_matrix[1,3] = -self.cij_dict['c14']
+                voigt_matrix[4,5] = self.cij_dict['c14']
+            else:
+                voigt_matrix[0,0] = 2*self.cij_dict['c66'] + self.cij_dict['c12']
+                voigt_matrix[1,1] = 2*self.cij_dict['c66'] + self.cij_dict['c12']
+                voigt_matrix[2,2] = self.cij_dict['c33']
+                voigt_matrix[0,1] = self.cij_dict['c12']
+                voigt_matrix[0,2] = self.cij_dict['c13']
+                voigt_matrix[1,2] = self.cij_dict['c13']
+                voigt_matrix[3,3] = self.cij_dict['c44']
+                voigt_matrix[4,4] = self.cij_dict['c44']
+                voigt_matrix[5,5] = self.cij_dict['c66']
+                voigt_matrix[0,3] = self.cij_dict['c14']
+                voigt_matrix[1,3] = -self.cij_dict['c14']
+                voigt_matrix[4,5] = self.cij_dict['c14']
 
         self.voigt_matrix = (voigt_matrix + voigt_matrix.T
                              - np.diag(voigt_matrix.diagonal()))
@@ -224,6 +254,28 @@ class ElasticConstants:
         return self.voigt_matrix
 
 
+    # def voigt_matrix_to_tensor(self):
+    #     """
+    #     returns the elastic tensor from given elastic constants in pars
+    #     (a dictionary of elastic constants)
+    #     based on the length of pars it decides what crystal structure we the sample has
+    #     """
+    #     cijkl = np.zeros([3,3,3,3])
+
+    #     cijkl[0,0,0,0] = self.voigt_matrix[0,0]
+    #     cijkl[1,1,1,1] = self.voigt_matrix[1,1]
+    #     cijkl[2,2,2,2] = self.voigt_matrix[2,2]
+    #     cijkl[0,0,1,1] = cijkl[1,1,0,0] = self.voigt_matrix[0,1]
+    #     cijkl[2,2,0,0] = cijkl[0,0,2,2] = self.voigt_matrix[0,2]
+    #     cijkl[1,1,2,2] = cijkl[2,2,1,1] = self.voigt_matrix[1,2]
+    #     cijkl[0,1,0,1] = cijkl[1,0,0,1] = cijkl[0,1,1,0] = cijkl[1,0,1,0] = self.voigt_matrix[5,5]
+    #     cijkl[0,2,0,2] = cijkl[2,0,0,2] = cijkl[0,2,2,0] = cijkl[2,0,2,0] = self.voigt_matrix[4,4]
+    #     cijkl[1,2,1,2] = cijkl[2,1,2,1] = cijkl[2,1,1,2] = cijkl[1,2,2,1] = self.voigt_matrix[3,3]
+
+    #     self.cijkl = cijkl
+    #     return cijkl
+
+
     def voigt_matrix_to_tensor(self):
         """
         returns the elastic tensor from given elastic constants in pars
@@ -231,16 +283,13 @@ class ElasticConstants:
         based on the length of pars it decides what crystal structure we the sample has
         """
         cijkl = np.zeros([3,3,3,3])
+        lookup = {(0,0):0, (1,1):1, (2,2):2, (1,2):3, (2,1):3, (0,2):4, (2,0):4, (0,1):5, (1,0):5}
 
-        cijkl[0,0,0,0] = self.voigt_matrix[0,0]
-        cijkl[1,1,1,1] = self.voigt_matrix[1,1]
-        cijkl[2,2,2,2] = self.voigt_matrix[2,2]
-        cijkl[0,0,1,1] = cijkl[1,1,0,0] = self.voigt_matrix[0,1]
-        cijkl[2,2,0,0] = cijkl[0,0,2,2] = self.voigt_matrix[0,2]
-        cijkl[1,1,2,2] = cijkl[2,2,1,1] = self.voigt_matrix[1,2]
-        cijkl[0,1,0,1] = cijkl[1,0,0,1] = cijkl[0,1,1,0] = cijkl[1,0,1,0] = self.voigt_matrix[5,5]
-        cijkl[0,2,0,2] = cijkl[2,0,0,2] = cijkl[0,2,2,0] = cijkl[2,0,2,0] = self.voigt_matrix[4,4]
-        cijkl[1,2,1,2] = cijkl[2,1,2,1] = cijkl[2,1,1,2] = cijkl[1,2,2,1] = self.voigt_matrix[3,3]
+        for i in np.arange(3):
+            for j in np.arange(3):
+                for k in np.arange(3):
+                    for l in np.arange(3):
+                        cijkl[i,j,k,l] = self.voigt_matrix[lookup[(i,j)], lookup[(k,l)]]
 
         self.cijkl = cijkl
         return cijkl
