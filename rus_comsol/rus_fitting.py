@@ -21,6 +21,9 @@ class RUSFitting:
                  report_name="",
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
                  polish=False, updating='deferred', tolerance=0.01):
+        """
+        freqs_files should contain experimental resonance frequencies in MHz and a weight
+        """
         self.rus_object  = rus_object
         self.init_pars   = deepcopy(self.rus_object.cij_dict)
         self.init_pars["angle_x"] = self.rus_object.angle_x
@@ -384,7 +387,7 @@ class RUSFitting:
                 self.rus_object.initialize()
             self.rus_object.nb_freq = self.nb_freqs + len(self.best_index_missing) + nb_additional_freqs
             freqs_sim = self.rus_object.compute_resonances()
-            index_missing = self.sort_freqs(freqs_sim)[-1]
+            freqs_found, index_found, freqs_missing, index_missing = self.sort_freqs(freqs_sim)
         else:
             freqs_found   = self.best_freqs_found
             # print(freqs_found)

@@ -31,16 +31,15 @@ bounds_dict  = {"c11": [135, 142],
 rus_object = RUSRPR(cij_dict=elastic_dict, symmetry="hexagonal",
                         dimensions=[0.911e-3,1.02e-3,1.305e-3],
                         mass = 8.9e-6,
-                        order = 16,
+                        order = 10,
                         nb_freq=84)
 
 # rus_object.start_comsol()
 # print(rus_object.compute_freqs())
 fitObject = RUSFitting(rus_object=rus_object, bounds_dict=bounds_dict,
-                        freqs_file='examples\\mn3ge\\Mn3Ge_2001B_frequency_list.dat',
-                        # freqs_file='mn3ge\\Mn3Ge_2001B_frequency_list.dat',
+                        freqs_file='examples\\mn3ge\\Mn3Ge_2001B_frequency_list_for_fit.dat',
                         nb_freqs='all',
-                        nb_workers=30, nb_max_missing=5, polish=False)
+                        nb_workers=5, nb_max_missing=5, polish=False)
 
 fitObject.run_fit(print_derivatives=True)
 # fitObject.print_logarithmic_derivative()
