@@ -147,19 +147,27 @@ class RUSRPR(ElasticConstants):
         return Gmat
 
 
-    def compute_resonances(self, eigvals_only=True):
+    def compute_resonances(self, eigvals_only=True, use_qudrants=True):
         """
         calculates resonance frequencies in MHz;
         pars: dictionary of elastic constants
         nb_freq: number of elastic constants to be displayed
         eigvals_only (True/False): gets only eigenvalues (i.e. resonance frequencies) or also gives eigenvectors (the latter is important when we want to calculate derivatives)
+        use_quadrants: if True, uses symmetry arguments of the elastic tensor to simplify and speed up eigenvalue solver;
+                        only gives correct result if crystal symmetry is orthorhombic or higher;
+                        if symmetry is e.g. rhombohedral, use use_quadrants=False
+                        (use_quadrants=True ignores all terms c14, c15, c16, c24, c25, ... in the elastic tensor)
         """
         Gmat = self.G_mat()
         if eigvals_only==True:
-            w = np.array([])
-            for ii in range(8):
-                w = np.concatenate((w, linalg.eigh(Gmat[np.ix_(self.block[ii], self.block[ii])], self.Emat[np.ix_(self.block[ii], self.block[ii])], eigvals_only=True)))
-            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            if use_qudrants==True:
+                w = np.array([])
+                for ii in range(8):
+                    w = np.concatenate((w, linalg.eigh(Gmat[np.ix_(self.block[ii], self.block[ii])], self.Emat[np.ix_(self.block[ii], self.block[ii])], eigvals_only=True)))
+                self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            else:
+                w = linalg.eigh(Gmat, self.Emat, eigvals_only=True)
+                self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
             return self.freqs
         else:
             w, a = linalg.eigh(Gmat, self.Emat)
