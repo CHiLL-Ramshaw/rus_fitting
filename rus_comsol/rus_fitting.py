@@ -379,7 +379,7 @@ class RUSFitting:
         return report
 
 
-    def report_best_freqs(self, nb_additional_freqs=0):
+    def report_best_freqs(self, nb_additional_freqs=10):
         if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
             if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
                 self.rus_object.start_comsol()
