@@ -10,7 +10,7 @@ class RUSRPR(ElasticConstants):
                  order,
                  nb_freq=1,
                  angle_x=0, angle_y=0, angle_z=0,
-                 init=False):
+                 init=False, use_quadrants=True):
         """
         cij_dict: a dictionary of elastic constants in GPa
         mass: a number in kg
@@ -18,6 +18,10 @@ class RUSRPR(ElasticConstants):
         order: integer - highest order polynomial used to express basis functions
         nb_freq: number of frequencies to display
         method: fitting method
+        use_quadrants: if True, uses symmetry arguments of the elastic tensor to simplify and speed up eigenvalue solver;
+                        only gives correct result if crystal symmetry is orthorhombic or higher;
+                        if symmetry is e.g. rhombohedral, use use_quadrants=False
+                        (use_quadrants=True ignores all terms c14, c15, c16, c24, c25, ... in the elastic tensor)
         """
         super().__init__(cij_dict,
                          symmetry=symmetry,
@@ -40,6 +44,8 @@ class RUSRPR(ElasticConstants):
         self.block  = [[],[],[],[],[],[],[],[]]
         self.Emat  = None
         self.Itens = None
+
+        self.use_quadrants = use_quadrants
 
         if init == True:
             self.initialize()
@@ -147,20 +153,16 @@ class RUSRPR(ElasticConstants):
         return Gmat
 
 
-    def compute_resonances(self, eigvals_only=True, use_qudrants=True):
+    def compute_resonances(self, eigvals_only=True):
         """
         calculates resonance frequencies in MHz;
         pars: dictionary of elastic constants
         nb_freq: number of elastic constants to be displayed
         eigvals_only (True/False): gets only eigenvalues (i.e. resonance frequencies) or also gives eigenvectors (the latter is important when we want to calculate derivatives)
-        use_quadrants: if True, uses symmetry arguments of the elastic tensor to simplify and speed up eigenvalue solver;
-                        only gives correct result if crystal symmetry is orthorhombic or higher;
-                        if symmetry is e.g. rhombohedral, use use_quadrants=False
-                        (use_quadrants=True ignores all terms c14, c15, c16, c24, c25, ... in the elastic tensor)
         """
         Gmat = self.G_mat()
         if eigvals_only==True:
-            if use_qudrants==True:
+            if self.use_quadrants==True:
                 w = np.array([])
                 for ii in range(8):
                     w = np.concatenate((w, linalg.eigh(Gmat[np.ix_(self.block[ii], self.block[ii])], self.Emat[np.ix_(self.block[ii], self.block[ii])], eigvals_only=True)))
