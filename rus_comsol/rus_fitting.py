@@ -108,8 +108,8 @@ class RUSFitting:
         data = np.loadtxt(self.freqs_file, dtype="float", comments="#")
         if len(data.shape) > 1:
             freqs_data = data[:,self.col_freqs]
-            weight     = np.ones_like(freqs_data)
-            # weight     = data[:,self.col_weight]
+            # weight     = np.ones_like(freqs_data)
+            weight     = data[:,self.col_weight]
         else:
             freqs_data = data
             weight     = np.ones_like(freqs_data)
@@ -321,11 +321,15 @@ class RUSFitting:
         ## Fit report
         clear_output(wait=True)
         if print_derivatives == False:
-            v_spacing = '#' + '-'*(79) + '\n'
-            report  = self.report_best_pars()
+            v_spacing = '\n' + 79*'#' + '\n' + 79*'#' + '\n' + '\n'
+            report  = v_spacing
+            report += self.report_sample_text()
             report += v_spacing
-            report += self.report_best_freqs()
             report += self.report_fit()
+            report += v_spacing
+            report += self.report_best_pars()
+            report += v_spacing
+            report += self.report_best_freqs()            
             print(report)
         else:
             report = self.report_total()
@@ -390,13 +394,9 @@ class RUSFitting:
             freqs_found, index_found, freqs_missing, index_missing = self.sort_freqs(freqs_sim)
         else:
             freqs_found   = self.best_freqs_found
-            # print(freqs_found)
             index_found   = self.best_index_found
-            # print(index_found)
             freqs_missing = self.best_freqs_missing
-            # print(freqs_missing)
             index_missing = self.best_index_missing
-            # print(index_missing)
             # print(len(freqs_found) + len(freqs_missing))
             freqs_sim = np.empty(len(freqs_found) + len(freqs_missing))
             # print(freqs_sim.size)
@@ -431,6 +431,20 @@ class RUSFitting:
 
         return report
 
+    def report_sample_text(self):
+        sample_template = "{0:<40}{1:<20}"
+        sample_text = '# [[Sample Characteristics]] \n'
+        sample_text += '# ' + sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
+        if isinstance(self.rus_object, RUSRPR):
+            sample_text += '# ' + sample_template.format(*['sample dimensions (mm) (x,y,z):', str(self.rus_object.dimensions*1e3)]) + '\n'
+            sample_text += '# ' + sample_template.format(*['mass (mg):', self.rus_object.mass*1e6]) + '\n'
+            sample_text += '# ' + sample_template.format(*['highest order basis polynomial:', self.rus_object.order]) + '\n'
+            sample_text += '# ' + sample_template.format(*['resonance frequencies calculated with:', 'RUS_RPR']) + '\n'
+        if isinstance(self.rus_object, RUSComsol):
+            sample_text += '# ' + sample_template.format(*['Comsol file:', self.rus_object.mph_file]) + '\n'
+            sample_text += '# ' + sample_template.format(*['resonance frequencies calculated with:', 'Comsol']) + '\n'
+        return sample_text
+
 
     def report_total(self, comsol_start=True):
         report_fit = self.report_fit()
@@ -443,26 +457,23 @@ class RUSFitting:
             der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False, comsol_start=False)
             self.rus_object.stop_comsol()
 
-        sample_template = "{0:<40}{1:<20}"
-        sample_text = '[[Sample Characteristics]] \n'
-        sample_text += sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
-        if isinstance(self.rus_object, RUSRPR):
-            sample_text += sample_template.format(*['sample dimensions (mm) (x,y,z):', str(self.rus_object.dimensions*1e3)]) + '\n'
-            sample_text += sample_template.format(*['mass (mg):', self.rus_object.mass*1e6]) + '\n'
-            sample_text += sample_template.format(*['highest order basis polynomial:', self.rus_object.order]) + '\n'
-            sample_text += sample_template.format(*['resonance frequencies calculated with:', 'RUS_RPR']) + '\n'
-        if isinstance(self.rus_object, RUSComsol):
-            sample_text += sample_template.format(*['Comsol file:', self.rus_object.mph_file]) + '\n'
-            sample_text += sample_template.format(*['resonance frequencies calculated with:', 'Comsol']) + '\n'
+        sample_text = self.report_sample_text()
 
         data_text = ''
+        freq_text_split = freq_text.split('\n')
+        freq_text_prepend = [' '*len(freq_text_split[0])] + freq_text_split
         for j in np.arange(len(freq_text.split('\n'))):
-            if j < len(der_text.split('\n')):
-                data_text += freq_text.split('\n')[j] + der_text.split('\n')[j] + '\n'
+            if j == 2 or j==len(freq_text.split('\n'))-3:
+                data_text += '#' + '-'*119 +'\n'
+            elif j < len(der_text.split('\n')):
+                data_text += freq_text_prepend[j] + der_text.split('\n')[j] + '\n'
             else:
-                data_text += freq_text.split('\n')[j] + '\n'
+                if j==len(freq_text.split('\n'))-1:
+                    data_text += '#' + '-'*119 +'\n'
+                else:
+                    data_text += freq_text_prepend[j] + '\n'
 
-        v_spacing = '\n' + 110*'#' + '\n' + 110*'#' + '\n' + '\n'
+        v_spacing = '\n' + 120*'#' + '\n' + 120*'#' + '\n' + '\n'
         report_total = v_spacing + sample_text + v_spacing +\
                  report_fit + v_spacing + data_text
 
