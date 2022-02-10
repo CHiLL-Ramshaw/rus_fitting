@@ -377,6 +377,7 @@ class RUSFitting:
         reduced_chi2 = chi2 / (N_points - N_variables)
         report = "#Fit Statistics" + '-'*(65) + '\n'
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
+        report+= "\t# polish             \t= " + str(self.polish) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
         report+= "\t# variables          \t= " + str(N_variables) + "\n"
         report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
