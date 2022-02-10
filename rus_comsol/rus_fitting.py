@@ -99,6 +99,7 @@ class RUSFitting:
     nb_workers = property(_get_nb_workers, _set_nb_workers)
 
 
+
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def load_data(self):
         """
@@ -273,9 +274,13 @@ class RUSFitting:
 
 
     def polish_func(self, single_value):
-        freqs_sim_list = self.pool.map(self.update_worker, single_value)
+        if type(single_value[0])==list:
+            freqs_sim_list = self.pool.map(self.update_worker, single_value)
+        else:
+            freqs_sim_list = self.pool.map(self.update_worker, [single_value])
         chi2 = self.compute_chi2(list(freqs_sim_list))
-        return chi2[0]
+        index_best = np.argmin(chi2)
+        return chi2[index_best]
 
 
     def ray_init(self, num_cpus=None):
