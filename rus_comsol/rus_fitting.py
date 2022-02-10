@@ -268,7 +268,7 @@ class RUSFitting:
                   + r"{0:.3f}".format(self.best_pars[free_name])
                   + " "
                   + " ")
-        print("Missing frequencies --- ", np.round(np.array(self.best_freqs_missing),3), " MHz")
+        print("Missing frequencies --- ", np.round(self.best_freqs_missing[self.best_index_missing<len(self.freqs_data)],3), " MHz")
         print("RMS = ", round(self.rms, 5), ' %')
         print ('')
         print ('#', 50*'-')
@@ -385,6 +385,7 @@ class RUSFitting:
         chi2 = fit_output.fun
         reduced_chi2 = chi2 / (N_points - N_variables)
         report = "#Fit Statistics" + '-'*(65) + '\n'
+        report+= "\t# Fitting Class      \t= rus_ray\n"
         report+= "\t# fitting method     \t= " + "differential evolution" + "\n"
         report+= "\t# polish             \t= " + str(self.polish) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
@@ -498,9 +499,25 @@ class RUSFitting:
 
     def save_report(self, report):
         if self.report_name == "":
-            self.report_name = "fit_report.txt"
-        report_file = open(self.report_name, "w")
-        report_file.write(report)
-        report_file.close()
+            index = self.freqs_file[::-1].find('/')
+            if index == -1:
+                index = self.freqs_file[::-1].find('\\')
+            self.report_name = self.freqs_file[:-index] + "fit_report.txt"
+
+            try:
+                report_file = open(self.report_name, "w")
+                report_file.write(report)
+                report_file.close()
+            except:
+                print ('there was a problem with the filename for the fit report')
+                print ('it will be saved in the current working directory')
+                self.report_name = "fit_report.txt"
+                report_file = open(self.report_name, "w")
+                report_file.write(report)
+                report_file.close()
+        else:
+            report_file = open(self.report_name, "w")
+            report_file.write(report)
+            report_file.close()
 
 
