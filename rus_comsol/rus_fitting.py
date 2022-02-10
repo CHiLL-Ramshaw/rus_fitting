@@ -448,6 +448,7 @@ class RUSFitting:
             sample_text += '# ' + sample_template.format(*['resonance frequencies calculated with:', 'RUS_RPR']) + '\n'
         if isinstance(self.rus_object, RUSComsol):
             sample_text += '# ' + sample_template.format(*['Comsol file:', self.rus_object.mph_file]) + '\n'
+            sample_text += '# ' + sample_template.format(*['density (kg/m^3):', self.rus_object.density]) + '\n'
             sample_text += '# ' + sample_template.format(*['resonance frequencies calculated with:', 'Comsol']) + '\n'
         return sample_text
 
