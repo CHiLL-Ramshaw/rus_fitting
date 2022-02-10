@@ -75,6 +75,7 @@ class RUSFitting:
 
         ## Empty spaces
         self.best_chi2 = None
+        self.rms       = None
         self.nb_gens   = 0
         self.best_freqs_found   = []
         self.best_index_found   = []
@@ -161,6 +162,7 @@ class RUSFitting:
     def compute_chi2(self, freqs_sim_list):
         ## Remove the useless small frequencies
         chi2 = np.empty(len(freqs_sim_list), dtype=np.float64)
+        rms  = np.empty(len(freqs_sim_list), dtype=np.float64)
         freqs_found_list   = []
         index_found_list   = []
         freqs_missing_list = []
@@ -171,11 +173,14 @@ class RUSFitting:
             index_found_list.append(index_found)
             freqs_missing_list.append(freqs_missing)
             index_missing_list.append(index_missing)
-            chi2[i] = np.sum(((freqs_found - self.freqs_data)/freqs_found)**2 * self.weight)
+            diff    = (freqs_found - self.freqs_data)/freqs_found
+            chi2[i] = np.sum(diff**2 * self.weight)
+            rms[i]  = np.sqrt(chi2[i]/len(diff)) * 100
         ## Best parameters for lowest chi2
         index_best = np.argmin(chi2)
         if self.best_chi2 == None or self.best_chi2 > chi2[index_best]:
             self.best_chi2 = chi2[index_best]
+            self.rms       = rms[index_best]
             for i, free_name in enumerate(self.free_pars_name):
                 self.best_pars[free_name] = self.last_gen[index_best][i]
             self.best_freqs_found   = freqs_found_list[index_best]
@@ -263,7 +268,11 @@ class RUSFitting:
                   + r"{0:.3f}".format(self.best_pars[free_name])
                   + " "
                   + " ")
-        print("Missing frequencies --- ", self.best_freqs_missing, " MHz\n")
+        print("Missing frequencies --- ", np.round(np.array(self.best_freqs_missing),3), " MHz")
+        print("RMS = ", round(self.rms, 5), ' %')
+        print ('')
+        print ('#', 50*'-')
+        print ('')  
         ## Save the report of the best parameters
         v_spacing = '#' + '-'*(79) + '\n'
         report  = self.report_best_pars()
