@@ -16,7 +16,7 @@ class RUSLMFIT:
     def __init__(self, rus_object, bounds_dict,
                  freqs_file,
                  nb_freqs,
-                 nb_missing=0,
+                 nb_max_missing=0,
                  report_name="",
                  method='differential_evolution',
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
@@ -45,8 +45,8 @@ class RUSLMFIT:
 
         ## Load data
         self.nb_freqs           = nb_freqs
-        self.nb_missing         = nb_missing
-        self.rus_object.nb_freq = nb_freqs + nb_missing
+        self.nb_missing         = nb_max_missing
+        self.rus_object.nb_freq = nb_freqs + nb_max_missing
         self.freqs_file      = freqs_file
         self.col_freqs       = 0
         self.col_weight      = 1
