@@ -204,6 +204,8 @@ class RUSFitting:
                                         angle_y=self.rus_object.angle_y,
                                         angle_z=self.rus_object.angle_z,
                                         study_name=self.rus_object.study_name,
+                                        study_tag=self.rus_object.study_tag,
+                                        mesh=self.rus_object.mesh,
                                         init=True)
 
             if isinstance(self.rus_object, RUSRPR):
