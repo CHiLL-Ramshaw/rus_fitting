@@ -2,6 +2,7 @@ import numpy as np
 from scipy import linalg
 from copy import deepcopy
 from rus_comsol.elastic_constants import ElasticConstants
+from time import time, sleep
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 class RUSRPR(ElasticConstants):
@@ -160,6 +161,7 @@ class RUSRPR(ElasticConstants):
         nb_freq: number of elastic constants to be displayed
         eigvals_only (True/False): gets only eigenvalues (i.e. resonance frequencies) or also gives eigenvectors (the latter is important when we want to calculate derivatives)
         """
+        sleep (10)
         Gmat = self.G_mat()
         if eigvals_only==True:
             if self.use_quadrants==True:

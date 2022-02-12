@@ -187,6 +187,7 @@ class RUSFitting:
             self.best_index_found   = index_found_list[index_best]
             self.best_freqs_missing = freqs_missing_list[index_best]
             self.best_index_missing = index_missing_list[index_best]
+            self.update_rus_object(self.last_gen[index_best])
         return chi2
 
 
@@ -239,6 +240,21 @@ class RUSFitting:
                 worker._set_angle_z.remote(value[i])
         return worker.compute_resonances.remote()
 
+    def update_rus_object(self, value):
+        ## Update cij with fit parameters
+        for i, free_name in enumerate(self.free_pars_name):
+            if free_name not in ["angle_x", "angle_y", "angle_z"]:
+                self.rus_object.set_cij_value(free_name, value[i])
+        ## Update angles
+        for i, free_name in enumerate(self.free_pars_name):
+            if   free_name=="angle_x":
+                self.rus_object.angle_x(value[i])
+            elif free_name=="angle_y":
+                self.rus_object.angle_y(value[i])
+            elif free_name=="angle_z":
+                self.rus_object.angle_z(value[i])
+
+
 
     def close_workers(self):
         if isinstance(self.rus_object, RUSComsol):
@@ -270,16 +286,17 @@ class RUSFitting:
                   + r"{0:.3f}".format(self.best_pars[free_name])
                   + " "
                   + " ")
-        print("Missing frequencies --- ", np.round(self.best_freqs_missing[self.best_index_missing<len(self.freqs_data)],3), " MHz")
-        print("RMS = ", round(self.rms, 5), ' %')
+        print("Missing frequencies --- ", np.round(np.array(self.best_freqs_missing)[np.array(self.best_index_missing)<len(self.freqs_data)],3), " MHz")
+        # print("Missing frequencies --- ", self.best_freqs_missing, " MHz")
+        print("RMS = ", np.round(self.rms, 5), ' %')
         print ('')
         print ('#', 50*'-')
-        print ('')  
+        print ('')
         ## Save the report of the best parameters
         v_spacing = '#' + '-'*(79) + '\n'
         report  = self.report_best_pars()
         report += v_spacing
-        report += self.report_best_freqs()
+        report += self.report_best_freqs(nb_additional_freqs=0)
         self.save_report(report)
         return chi2
 
@@ -329,7 +346,8 @@ class RUSFitting:
         ## Export final parameters from the fit
         for i, free_name in enumerate(self.free_pars_name):
             self.best_pars[free_name] = fit_output.x[i]
-            self.rus_object.cij_dict[free_name] = fit_output.x[i]
+            # self.rus_object.cij_dict[free_name] = fit_output.x[i]
+        self.update_rus_object(fit_output.x)
         ## Close COMSOL for each workers
         self.close_workers()
         ## Stop Ray
@@ -345,7 +363,7 @@ class RUSFitting:
             report += v_spacing
             report += self.report_best_pars()
             report += v_spacing
-            report += self.report_best_freqs()            
+            report += self.report_best_freqs()
             print(report)
         else:
             report = self.report_total()
@@ -430,21 +448,22 @@ class RUSFitting:
         weight[index_missing] = 0
 
         diff = np.zeros_like(freqs_data)
-        for i in range(len(freqs_data)):
-            if freqs_data[i] != 0:
-                diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_data[i] * 100 * weight[i]
-        rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0]))
+        # for i in range(len(freqs_data)):
+            # if freqs_data[i] != 0:
+                # diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_sim[i] * 100 * weight[i]
+        diff = np.abs(freqs_data-freqs_sim[:len(freqs_found) + len(freqs_missing)]) / freqs_sim[:len(freqs_found) + len(freqs_missing)] * 100 * weight
+        rms = np.sqrt( np.sum(diff[diff!=0]**2) / len(diff[diff!=0]) )
 
         template = "{0:<8}{1:<13}{2:<13}{3:<13}{4:<8}"
         report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)', 'weight']) + '\n'
         report += '#' + '-'*(79) + '\n'
         for j in range(len(freqs_sim)):
             if j < len(freqs_data):
-                report+= template.format(*[j, round(freqs_data[j],6), round(freqs_sim[j],6), round(diff[j], 3), round(weight[j], 0)]) + '\n'
+                report+= template.format(*[j, np.round(freqs_data[j],6), np.round(freqs_sim[j],6), np.round(diff[j], 3), np.round(weight[j], 0)]) + '\n'
             else:
-                report+= template.format(*[j, '', round(freqs_sim[j],6)], '') + '\n'
+                report+= template.format(*[j, '', np.round(freqs_sim[j],6), '', '']) + '\n'
         report += '#' + '-'*(79) + '\n'
-        report += '# RMS = ' + str(round(rms,3)) + ' %\n'
+        report += '# RMS = ' + str(np.round(rms,3)) + ' %\n'
         report += '#' + '-'*(79) + '\n'
 
         return report
@@ -501,25 +520,10 @@ class RUSFitting:
 
     def save_report(self, report):
         if self.report_name == "":
-            index = self.freqs_file[::-1].find('/')
-            if index == -1:
-                index = self.freqs_file[::-1].find('\\')
-            self.report_name = self.freqs_file[:-index] + "fit_report.txt"
+           self.report_name = "fit_report.txt"
 
-            try:
-                report_file = open(self.report_name, "w")
-                report_file.write(report)
-                report_file.close()
-            except:
-                print ('there was a problem with the filename for the fit report')
-                print ('it will be saved in the current working directory')
-                self.report_name = "fit_report.txt"
-                report_file = open(self.report_name, "w")
-                report_file.write(report)
-                report_file.close()
-        else:
-            report_file = open(self.report_name, "w")
-            report_file.write(report)
-            report_file.close()
+        report_file = open(self.report_name, "w")
+        report_file.write(report)
+        report_file.close()
 
 
