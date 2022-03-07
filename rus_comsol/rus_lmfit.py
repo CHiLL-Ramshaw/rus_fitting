@@ -224,7 +224,8 @@ class RUSLMFIT:
                                         recombination=self.crossing,
                                         tol=self.tolerance)
         elif self.method == 'leastsq':
-            fit_output = minimize(self.residual_function, self.params, method=self.method)
+            fit_output = minimize(self.residual_function, self.params, method=self.method,
+                                  ftol=self.tolerance)
         else:
             print ('your fit method is not a valid method')
 
