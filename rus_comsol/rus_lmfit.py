@@ -8,8 +8,8 @@ import sys
 from IPython.display import clear_output
 from psutil import cpu_count
 from rus_comsol.rus_comsol import RUSComsol
-from rus_comsol.rus_rpr import RUSRPR
-from lmfit import minimize, Parameters, report_fit
+from rus_comsol.rus_xyz import RUSXYZ
+from lmfit import minimize, Parameters, fit_report
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 class RUSLMFIT:
@@ -115,21 +115,23 @@ class RUSLMFIT:
         self.weight = weight[:self.nb_freqs]
 
 
-    def assignement(self, freqs_data, freqs_sim):
-        """
-        Linear assigment of the simulated frequencies to the data frequencies
-        in case there is one or more missing frequencies in the data
-        """
-        cost_matrix = distance_matrix(freqs_data[:, None], freqs_sim[:, None])**2
-        index_found = linear_sum_assignment(cost_matrix)[1]
-        ## index_found is the indices for freqs_sim to match freqs_data
-        return index_found, freqs_sim[index_found]
+    # def assignement(self, freqs_data, freqs_sim):
+    #     """
+    #     Linear assigment of the simulated frequencies to the data frequencies
+    #     in case there is one or more missing frequencies in the data
+    #     """
+    #     cost_matrix = distance_matrix(freqs_data[:, None], freqs_sim[:, None])**2
+    #     index_found = linear_sum_assignment(cost_matrix)[1]
+    #     ## index_found is the indices for freqs_sim to match freqs_data
+    #     return index_found, freqs_sim[index_found]
 
 
     def sort_freqs(self, freqs_sim):
         if self.nb_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
-            index_found, freqs_found = self.assignement(self.freqs_data, freqs_sim)
+            cost_matrix = distance_matrix(self.freqs_data[:, None], freqs_sim[:, None])**2
+            index_found = linear_sum_assignment(cost_matrix)[1]
+            freqs_found = freqs_sim[index_found]
             ## Give the missing frequencies in the data -------------------------
             # Let's remove the extra simulated frequencies that are beyond
             # the list of data frequencies
@@ -188,7 +190,7 @@ class RUSLMFIT:
         print ('BEST PARAMETERS:')
         for key, item in self.best_pars.items():
             print ('\t',key, ': ', round(item, 5))
-        print ('MISSING FREQUENCIES: ', np.round(freqs_missing[index_missing<len(self.freqs_data)], 3), ' MHz')
+        print ('MISSING FREQUENCIES: ', np.round(np.array(freqs_missing)[np.array(index_missing)<len(self.freqs_data)], 3), ' MHz')
         print ('RMS: ', round(self.rms, 5), ' %')
         print ('')
         print ('#', 50*'-')
@@ -202,7 +204,7 @@ class RUSLMFIT:
             print ("the rus_comsol object was not started!")
             print ("it is being initialized right now ...")
             self.rus_object.start_comsol()
-        if isinstance(self.rus_object, RUSRPR) and (self.rus_object.Emat is None):
+        if isinstance(self.rus_object, RUSXYZ) and (self.rus_object.Emat is None):
             print ("the rus_rpr object was not initialized!")
             print ("it is being initialized right now ...")
             self.rus_object.initialize()
@@ -227,6 +229,7 @@ class RUSLMFIT:
 
         self.fit_output = fit_output
         # stop timer
+        print(fit_report(self.fit_output))
         self.fit_duration = time.time() - t0
 
 
@@ -300,7 +303,7 @@ class RUSLMFIT:
         if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
             if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
                 self.rus_object.start_comsol()
-            if isinstance(self.rus_object, RUSRPR) and (self.rus_object.Emat is None):
+            if isinstance(self.rus_object, RUSXYZ) and (self.rus_object.Emat is None):
                 self.rus_object.initialize()
             self.rus_object.nb_freq = self.nb_freqs + len(self.best_index_missing) + nb_additional_freqs
             freqs_sim = self.rus_object.compute_resonances()
@@ -325,21 +328,22 @@ class RUSLMFIT:
         weight[index_missing] = 0
 
         diff = np.zeros_like(freqs_data)
-        for i in range(len(freqs_data)):
-            if freqs_data[i] != 0:
-                diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_data[i] * 100 * weight[i]
-        rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0]))
+        # for i in range(len(freqs_data)):
+        #     if freqs_data[i] != 0:
+        #         diff[i] = np.abs(freqs_data[i]-freqs_sim[i]) / freqs_data[i] * 100 * weight[i]
+        diff = np.abs(freqs_data-freqs_sim[:len(freqs_found) + len(freqs_missing)]) / freqs_sim[:len(freqs_found) + len(freqs_missing)] * 100 * weight
+        rms = np.sqrt( np.sum(diff[diff!=0]**2) / len(diff[diff!=0]) )
 
         template = "{0:<8}{1:<13}{2:<13}{3:<13}{4:<8}"
         report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)', 'weight']) + '\n'
         report += '#' + '-'*(79) + '\n'
         for j in range(len(freqs_sim)):
             if j < len(freqs_data):
-                report+= template.format(*[j, round(freqs_data[j],6), round(freqs_sim[j],6), round(diff[j], 3), round(weight[j], 0)]) + '\n'
+                report+= template.format(*[j, np.round(freqs_data[j],6), np.round(freqs_sim[j],6), np.round(diff[j], 3), np.round(weight[j], 0)]) + '\n'
             else:
-                report+= template.format(*[j, '', round(freqs_sim[j],6)], '') + '\n'
+                report+= template.format(*[j, '', np.round(freqs_sim[j],6), '', '']) + '\n'
         report += '#' + '-'*(79) + '\n'
-        report += '# RMS = ' + str(round(rms,3)) + ' %\n'
+        report += '# RMS = ' + str(np.round(rms,3)) + ' %\n'
         report += '#' + '-'*(79) + '\n'
 
         return report
@@ -348,11 +352,11 @@ class RUSLMFIT:
         sample_template = "{0:<40}{1:<20}"
         sample_text = '# [[Sample Characteristics]] \n'
         sample_text += '# ' + sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
-        if isinstance(self.rus_object, RUSRPR):
-            sample_text += '# ' + sample_template.format(*['sample dimensions (mm) (x,y,z):', str(self.rus_object.dimensions*1e3)]) + '\n'
-            sample_text += '# ' + sample_template.format(*['mass (mg):', self.rus_object.mass*1e6]) + '\n'
+        if isinstance(self.rus_object, RUSXYZ):
+            # sample_text += '# ' + sample_template.format(*['sample dimensions (mm) (x,y,z):', str(self.rus_object.dimensions*1e3)]) + '\n'
+            sample_text += '# ' + sample_template.format(*['density (kg/m^3):', self.rus_object.density]) + '\n'
             sample_text += '# ' + sample_template.format(*['highest order basis polynomial:', self.rus_object.order]) + '\n'
-            sample_text += '# ' + sample_template.format(*['resonance frequencies calculated with:', 'RUS_RPR']) + '\n'
+            sample_text += '# ' + sample_template.format(*['resonance frequencies calculated with:', 'RUS_XYZ']) + '\n'
         if isinstance(self.rus_object, RUSComsol):
             sample_text += '# ' + sample_template.format(*['Comsol file:', self.rus_object.mph_file]) + '\n'
             sample_text += '# ' + sample_template.format(*['density (kg/m^3):', self.rus_object.density]) + '\n'
@@ -363,7 +367,7 @@ class RUSLMFIT:
     def report_total(self, comsol_start=True):
         report_fit = self.report_fit()
         report_fit += self.report_best_pars()
-        if isinstance(self.rus_object, RUSRPR):
+        if isinstance(self.rus_object, RUSXYZ):
             freq_text  = self.report_best_freqs(nb_additional_freqs=10)
             der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False)
         if isinstance(self.rus_object, RUSComsol):
