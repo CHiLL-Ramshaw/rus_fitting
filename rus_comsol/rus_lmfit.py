@@ -56,7 +56,8 @@ class RUSLMFIT:
         
 
         ## fit algorithm
-        self.method = method # "shgo", "differential_evolution", "leastsq"
+        self.method    = method # "shgo", "differential_evolution", "leastsq"
+        self.errorbars = False # True if uncertainties have been calculated, False if not
 
         ## set up fit parameters for lmfit
         self.params = Parameters()
@@ -228,8 +229,8 @@ class RUSLMFIT:
             print ('your fit method is not a valid method')
 
         self.fit_output = fit_output
+        self.errorbars  = self.fit_output.errorbars
         # stop timer
-        print(fit_report(self.fit_output))
         self.fit_duration = time.time() - t0
 
 
@@ -257,10 +258,18 @@ class RUSLMFIT:
         for free_name in self.free_pars_name:
             if free_name[0] == "c": unit = "GPa"
             else: unit = "deg"
-            report+= "\t# " + free_name + " : " + r"{0:.3f}".format(self.best_pars[free_name]) + " " + \
-                     unit + \
-                     " (init = [" + str(self.bounds_dict[free_name]) + \
-                     ", " +         unit + "])" + "\n"
+            
+            if self.errorbars:
+                err = self.fit_output.params[free_name].stderr
+                report+= "\t# " + free_name + " : (" + r"{0:.3f}".format(self.best_pars[free_name]) + " +- " + \
+                         r"{0:.3f}".format(err) + ') ' + unit + \
+                         " (init = [" + str(self.bounds_dict[free_name]) + \
+                         ", " +         unit + "])" + "\n"
+            else:
+                report+= "\t# " + free_name + " : " + r"{0:.3f}".format(self.best_pars[free_name]) + " " + \
+                         unit + \
+                         " (init = [" + str(self.bounds_dict[free_name]) + \
+                         ", " +         unit + "])" + "\n"
         report+= "#Fixed values" + '-'*(67) + '\n'
         if len(self.fixed_pars_name) == 0:
             report += "\t# " + "None" + "\n"
