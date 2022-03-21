@@ -79,8 +79,9 @@ class RUSLMFIT:
         self.report_name = report_name
 
         ## Empty spaces
-        self.rms = None
-        self.nb_gens   = 0
+        self.rms                = None
+        self.rms_list           = []
+        self.nb_gens            = 0
         self.best_freqs_found   = []
         self.best_index_found   = []
         self.best_freqs_missing = []
@@ -186,6 +187,7 @@ class RUSLMFIT:
         # this is what we want to be minimized
         diff = (self.best_freqs_found - self.freqs_data) / self.best_freqs_found * self.weight
         self.rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0])) * 100
+        self.rms_list.append(self.rms)
 
         print ('NUMBER OF GENERATIONS: ', self.nb_gens)
         print ('BEST PARAMETERS:')
@@ -250,7 +252,7 @@ class RUSLMFIT:
             report = self.report_total()
             print(report)
         self.save_report(report)
-        return self.rus_object
+        return self.rms_list
 
     # the following methods are just to display the fit report and data in a nice way
     

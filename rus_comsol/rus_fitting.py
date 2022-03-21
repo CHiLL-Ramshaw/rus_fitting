@@ -78,6 +78,7 @@ class RUSFitting:
         ## Empty spaces
         self.best_chi2 = None
         self.rms       = None
+        self.rms_list  = []
         self.nb_gens   = 0
         self.best_freqs_found   = []
         self.best_index_found   = []
@@ -193,6 +194,7 @@ class RUSFitting:
             self.best_freqs_missing = freqs_missing_list[index_best]
             self.best_index_missing = index_missing_list[index_best]
             self.update_rus_object(self.last_gen[index_best])
+        self.rms_list.append(self.rms)
         return chi2
 
 
@@ -376,7 +378,7 @@ class RUSFitting:
             report = self.report_total()
             print(report)
         self.save_report(report)
-        return self.rus_object
+        return self.rms_list
 
 
     def report_best_pars(self):
