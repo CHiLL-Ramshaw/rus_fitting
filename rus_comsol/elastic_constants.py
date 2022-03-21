@@ -1,6 +1,7 @@
 import numpy as np
 from numpy import cos, sin
 from copy import deepcopy
+import sys
 
 class ElasticConstants:
     def __init__(self, cij_dict, symmetry,
@@ -94,6 +95,10 @@ class ElasticConstants:
         based on the length of pars it decides what crystal structure we the sample has
         """
         voigt_matrix = np.zeros((6,6))
+
+        if self.symmetry not in ['cubic', 'tetragonal', 'orthorhombic', 'rhombohedral', 'hexagonal']:
+            print ('your provided symmetry is not in ', "['cubic', 'tetragonal', 'orthorhombic', 'rhombohedral', 'hexagonal']")
+            sys.exit()
 
         if self.symmetry=="cubic":
             voigt_matrix[0,0] = voigt_matrix[1,1] = voigt_matrix[2,2] = self.cij_dict['c11']

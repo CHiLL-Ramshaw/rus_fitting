@@ -390,7 +390,7 @@ class RUSLMFIT:
 
         data_text = ''
         freq_text_split = freq_text.split('\n')
-        freq_text_prepend = [' '*len(freq_text_split[0])] + freq_text_split
+        freq_text_prepend = ['#'+' '*(len(freq_text_split[0])-1)] + freq_text_split
         for j in np.arange(len(freq_text.split('\n'))):
             if j == 2 or j==len(freq_text.split('\n'))-3:
                 data_text += '#' + '-'*119 +'\n'
