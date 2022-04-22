@@ -18,11 +18,12 @@ class StokesMatrices:
     def __init__(self, order,
                  surface_file_path, surface_file_type, 
                  integral_path, Emat_path, Itens_path,
-                 parallel=True, nb_processes=1, scale='m'):
+                 parallel=True, nb_processes=1, scale='m', move_com=True):
 
         self.order   = order
         scale_lookup = {'m': 1, 'cm':1e-2, 'mm':1e-3}
         self.scale   = scale_lookup[scale]
+        self.move_com = move_com
         self.basis, self.lookUp     = self.makeBasis(self.order)
         self.basisx2, self.lookUpx2 = self.makeBasis(self.order*2)
 
@@ -188,8 +189,9 @@ class StokesMatrices:
 
 
         points, faces = stl.points, stl.faces.reshape(-1, 4)[:, 1:]
-        offset = np.tile(stl.center_of_mass(), (points.shape[0], 1))
-        points -= offset
+        if self.move_com:
+            offset = np.tile(stl.center_of_mass(), (points.shape[0], 1))
+            points -= offset
 
         MESH = np.zeros([faces.shape[0], 3, 3])
         TRIANGLES = np.zeros([faces.shape[0], 3, 2])
@@ -234,8 +236,9 @@ class StokesMatrices:
         stl = stl.scale(self.scale)
 
         points, faces = stl.points, stl.faces.reshape(-1, 4)[:, 1:]
-        offset = np.tile(stl.center_of_mass(), (points.shape[0], 1))
-        points -= offset
+        if self.move_com:
+            offset = np.tile(stl.center_of_mass(), (points.shape[0], 1))
+            points -= offset
 
         MESH = np.zeros([faces.shape[0], 3, 3])
         TRIANGLES = np.zeros([faces.shape[0], 3, 2])
