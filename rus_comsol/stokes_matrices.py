@@ -10,6 +10,8 @@ import multiprocessing as mp
 from itertools import repeat
 import mph
 import os
+from scipy.linalg import eigh
+from scipy.spatial.transform import Rotation
 
 
 
@@ -18,12 +20,13 @@ class StokesMatrices:
     def __init__(self, order,
                  surface_file_path, surface_file_type, 
                  integral_path, Emat_path, Itens_path,
-                 parallel=True, nb_processes=1, scale='m', move_com=True):
+                 parallel=True, nb_processes=1, scale='m', move_com=True, rotate_mesh=False):
 
-        self.order   = order
-        scale_lookup = {'m': 1, 'cm':1e-2, 'mm':1e-3}
-        self.scale   = scale_lookup[scale]
-        self.move_com = move_com
+        self.order       = order
+        scale_lookup     = {'m': 1, 'cm':1e-2, 'mm':1e-3}
+        self.scale       = scale_lookup[scale]
+        self.move_com    = move_com
+        self.rotate_mesh = rotate_mesh
         self.basis, self.lookUp     = self.makeBasis(self.order)
         self.basisx2, self.lookUpx2 = self.makeBasis(self.order*2)
 
@@ -148,6 +151,80 @@ class StokesMatrices:
 
         return res
 
+    def pointsfaces_to_meshtriangles (self, points, faces):
+        '''
+        converts points and faces of a surface mesh to mesh and triangles
+        '''
+        MESH = np.zeros([faces.shape[0], 3, 3])
+        TRIANGLES = np.zeros([faces.shape[0], 3, 2])
+        for idx, f in enumerate(faces):
+            t = np.array([points[f[0]], points[f[1]], points[f[2]]])
+            MESH[idx] = t
+            TRIANGLES[idx] = np.array([[t[0][0], t[0][1]], [t[1][0], t[1][1]], [t[2][0],t[2][1]]])
+        MESH = np.stack(MESH, axis= -2)
+        # MESH0 = deepcopy(MESH)
+        TRIANGLES = np.stack(TRIANGLES, axis= -2)
+        return MESH, TRIANGLES
+
+
+    def rotate_moment_of_inertia (self, polydata):
+        
+        # constructs a basis of polynomials with exact degree of 2 ################################
+        basis = np.zeros([6, 3], dtype= int)
+        lookUp = {}
+        idx = 0
+        for i in range(3):
+            for j in range(3):
+                for k in range(3):
+                    if i+j+k==2:
+                        basis[idx] = np.array([i,j,k])
+                        lookUp[(i,j,k)] = idx
+                        idx += 1
+
+        points, faces = polydata.points, polydata.faces.reshape(-1, 4)[:, 1:]
+        offset = np.tile(polydata.center_of_mass(), (points.shape[0], 1))
+        points -= offset
+        mesh, triangles = self.pointsfaces_to_meshtriangles(points, faces)
+        
+        # integrate basis over mesh ###############################################################
+        if self.parallel:
+            pool = mp.Pool(processes = self.nb_processes)
+            t0 = time()
+            output = pool.starmap(self.intVecBasisFunc, zip(basis, repeat(mesh), repeat(triangles)))
+            intVals = np.array(output)
+        else:
+            intVals = np.zeros(len(basis))
+            for i, b in enumerate(basis):
+                tmp = self.intVecBasisFunc(b, mesh, triangles)
+                intVals[i] = tmp
+        
+        # create moment of inertia matrix
+        M = np.zeros((3,3))
+        M[0,0] =          intVals[lookUp[(2,0,0)]]
+        M[1,1] =          intVals[lookUp[(0,2,0)]]
+        M[2,2] =          intVals[lookUp[(0,0,2)]]
+        M[0,1] = M[1,0] = intVals[lookUp[(1,1,0)]]
+        M[0,2] = M[2,0] = intVals[lookUp[(1,0,1)]]
+        M[1,2] = M[2,1] = intVals[lookUp[(0,1,1)]]
+
+        # find eigenvectors of M ####################################################################
+        # the matrix of eigenvectors can be used as rotation matrix to rotate surface file ##########
+        R = eigh(M)[1]
+        rot = Rotation.from_matrix(R)
+        rot_inv = rot.inv()
+
+        Euler = rot_inv.as_euler('xyz', degrees=True)
+        print('we rotate the surface file:')
+        print('       ', Euler[0], ' degrees around the x-axis')
+        print('       ', Euler[1], ' degrees around the y-axis')
+        print('       ', Euler[2], ' degrees around the z-axis')
+
+        polydata = polydata.rotate_x(Euler[0], inplace=False)
+        polydata = polydata.rotate_y(Euler[1], inplace=False)
+        polydata = polydata.rotate_z(Euler[2], inplace=False)
+        
+        return polydata
+
     def getMeshFromComsol(self, save_path=None, component= 'comp1', mesh= 'mesh1'):
         '''
         extracts the vertices and faces of a surface mesh
@@ -185,7 +262,7 @@ class StokesMatrices:
         else:
             npz_stl = polydata
         stl = pv.PolyData(npz_stl['points'], npz_stl['faces'])
-        stl = stl.scale(self.scale)
+        stl = stl.scale(self.scale, inplace=False)
 
 
         points, faces = stl.points, stl.faces.reshape(-1, 4)[:, 1:]
@@ -235,6 +312,17 @@ class StokesMatrices:
         stl = pv.PolyData(self.surface_path)
         stl = stl.scale(self.scale)
 
+        if self.rotate_mesh == True:
+            print()
+            print('---------------------------------------------------------------------')
+            print()
+            stl = self.rotate_moment_of_inertia(stl)
+            print('Remember to also rotate your elastic constants by these angles!')
+            print("Otherwise you won't get the right resonance frequencies anymore")
+            print()
+            print('---------------------------------------------------------------------')
+            print()
+
         points, faces = stl.points, stl.faces.reshape(-1, 4)[:, 1:]
         if self.move_com:
             offset = np.tile(stl.center_of_mass(), (points.shape[0], 1))
@@ -244,7 +332,6 @@ class StokesMatrices:
         TRIANGLES = np.zeros([faces.shape[0], 3, 2])
         for idx, f in enumerate(faces):
             t = np.array([points[f[0]], points[f[1]], points[f[2]]])
-
             MESH[idx] = t
             TRIANGLES[idx] = np.array([[t[0][0], t[0][1]], [t[1][0], t[1][1]], [t[2][0],t[2][1]]])
         MESH = np.stack(MESH, axis= -2)
@@ -362,7 +449,7 @@ if __name__ == '__main__':
     E_path       = f'Mn3Ge_2104C_stokes_mesh3_Etens_basis_{N}.npy'
     I_path       = f'Mn3Ge_2104C_stokes_mesh3_Itens_basis_{N}.npy'
     int_path     = f'Mn3Ge_2104C_stokes_mesh3_integral_basis_{N}.npy'
-    surface_path = 'Mn3Ge_2104C_no_inclusions_mesh_3.stl'
+    surface_path = 'tests/mn3ge_cube_rot.stl'
 
     stokes = StokesMatrices(order=N,
                             surface_file_path = surface_path,
@@ -372,4 +459,10 @@ if __name__ == '__main__':
                             Emat_path = E_path,
                             Itens_path = I_path, 
                             parallel=True, nb_processes=6)
-    stokes.create_G_E_matrices()
+    
+    scheme = quadpy.t2.get_good_scheme(40)
+    stl = pv.PolyData(surface_path)
+    # stl = stl.scale('mm')
+ 
+    M = stokes.moment_of_inertia(stl)
+    print(M)
