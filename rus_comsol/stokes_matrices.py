@@ -328,9 +328,9 @@ class StokesMatrices:
     
     
     def create_G_E_matrices(self):
-        if surface_file_type in ['stl', 'STL', 'Stl']:
+        if self.surface_file_type in ['stl', 'STL', 'Stl']:
             polydata = self.StlToPolyData(self.surface_path, self.scale)
-        elif surface_file_type in ['Comsol', 'comsol', 'COMSOL']:
+        elif self.surface_file_type in ['Comsol', 'comsol', 'COMSOL']:
             polydata = self.NpzToPolyData(self.surface_path, self.scale)
         else:
             print('the specified surface_file_type is not valid!')
