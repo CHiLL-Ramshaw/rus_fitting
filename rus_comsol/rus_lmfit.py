@@ -41,7 +41,7 @@ class RUSLMFIT:
 
         self.fixed_pars_name = np.setdiff1d(sorted(self.init_pars.keys()),
                                              self.free_pars_name)
-        
+
 
         ## Load data
         self.nb_freqs           = nb_freqs
@@ -53,7 +53,7 @@ class RUSLMFIT:
         self.freqs_data      = None
         self.weight          = None
         self.load_data()
-        
+
 
         ## fit algorithm
         self.method    = method # "shgo", "differential_evolution", "leastsq"
@@ -65,7 +65,7 @@ class RUSLMFIT:
             self.params.add(param, value=self.init_pars[param], vary=True, min=self.bounds_dict[param][0], max=self.bounds_dict[param][1])
         for param in self.fixed_pars_name:
             self.params.add(param, value=self.init_pars[param], vary=False)
-               
+
 
         ## Differential evolution
         self.population    = population # (popsize = population * len(x))
@@ -197,11 +197,11 @@ class RUSLMFIT:
         print ('RMS: ', round(self.rms, 5), ' %')
         print ('')
         print ('#', 50*'-')
-        print ('')       
-        
+        print ('')
+
         return diff
 
-    
+
     def run_fit (self, print_derivatives=False):
         if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
             print ("the rus_comsol object was not started!")
@@ -214,7 +214,7 @@ class RUSLMFIT:
 
         # start timer
         t0 = time.time()
-        
+
         # run fit
         if self.method == 'differential_evolution':
             fit_output = minimize(self.residual_function, self.params, method=self.method,
@@ -246,7 +246,7 @@ class RUSLMFIT:
             report += v_spacing
             report += self.report_best_pars()
             report += v_spacing
-            report += self.report_best_freqs()            
+            report += self.report_best_freqs()
             print(report)
         else:
             report = self.report_total()
@@ -255,21 +255,21 @@ class RUSLMFIT:
         return self.rms_list
 
     # the following methods are just to display the fit report and data in a nice way
-    
+
     def report_best_pars(self):
         report = "#Variables" + '-'*(70) + '\n'
         for free_name in self.free_pars_name:
             if free_name[0] == "c": unit = "GPa"
             else: unit = "deg"
-            
+
             if self.errorbars:
                 err = self.fit_output.params[free_name].stderr
-                report+= "\t# " + free_name + " : (" + r"{0:.3f}".format(self.best_pars[free_name]) + " +- " + \
-                         r"{0:.3f}".format(err) + ') ' + unit + \
+                report+= "\t# " + free_name + " : (" + r"{0:.10f}".format(self.best_pars[free_name]) + " +- " + \
+                         r"{0:.10f}".format(err) + ') ' + unit + \
                          " (init = [" + str(self.bounds_dict[free_name]) + \
                          ", " +         unit + "])" + "\n"
             else:
-                report+= "\t# " + free_name + " : " + r"{0:.3f}".format(self.best_pars[free_name]) + " " + \
+                report+= "\t# " + free_name + " : " + r"{0:.10f}".format(self.best_pars[free_name]) + " " + \
                          unit + \
                          " (init = [" + str(self.bounds_dict[free_name]) + \
                          ", " +         unit + "])" + "\n"

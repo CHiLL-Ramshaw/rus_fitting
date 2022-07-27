@@ -11,7 +11,7 @@ from rus_comsol.rpr_matrices import RPRMatrices
 
 class RUSXYZ(ElasticConstants):
     def __init__(self, cij_dict, symmetry, order, density,
-                 load_matrices, matrix_object = None, Emat_path = None, Itens_path = None,
+                 Emat_path = None, Itens_path = None,
                  nb_freq=1,
                  angle_x=0, angle_y=0, angle_z=0,
                  init=False, use_quadrants=True):
@@ -31,10 +31,6 @@ class RUSXYZ(ElasticConstants):
                          symmetry=symmetry,
                          angle_x=angle_x, angle_y=angle_y, angle_z=angle_z)
 
-        self.load_matrices = load_matrices
-        if (self.load_matrices==False) and (matrix_object is None):
-            print ('if you want to calculate matrices within the rus_xyz class, you need to specify a stokes/rpr class')
-        self.matrix_object = matrix_object
         self.Emat_path     = Emat_path
         self.Itens_path    = Itens_path
 
@@ -98,27 +94,19 @@ class RUSXYZ(ElasticConstants):
                             self.block[lookUp[tuple((-1,-1,-1)**(self.basis[self.idx] + np.roll([1,0,0], ii)))]].append(ii*self.N + self.idx)
                         self.idx += 1
 
-        if self.load_matrices == True:
-            self.Emat  = np.load(self.Emat_path)
-            self.Itens = np.load(self.Itens_path)
-
-            idx = int((self.order+1)*(self.order+2)*(self.order+3)/6)
-            if abs(len(self.Emat)-3*idx) > 0.01:
-                print ('the order in the "RUSXYZ" class and the imported matrices need to be the same')
-                idx = len(self.Emat)/3
-                order_emat = int(np.round(-2 + (27*idx+np.sqrt(-3+729*idx**2))**(1/3)/3**(2/3) + 1/(81*idx+3*np.sqrt(-3+729*idx**2))**(1/3), decimals=0))
-                print ('the order in the RUSXYZ class is:      ', self.order)
-                print ('the order in the imported matrices is: ', order_emat)
-                sys.exit()
-
-        elif self.load_matrices == False:
-            if abs(self.order-self.matrix_object.order)>0.01:
-                print ('the order in the "RUSXYZ" class and the "...Matrices" class need to be the same')
-                sys.exit()
-            self.Emat, self.Itens = self.matrix_object.create_G_E_matrices()
-            self.Emat_path  = self.matrix_object.Emat_path
-            self.Itens_path = self.matrix_object.Itens_path
+        self.Emat  = np.load(self.Emat_path)
         self.Emat = self.Emat*self.density
+        self.Itens = np.load(self.Itens_path)
+
+        idx = int((self.order+1)*(self.order+2)*(self.order+3)/6)
+        if abs(len(self.Emat)-3*idx) > 0.01:
+            print ('the order in the "RUSXYZ" class and the imported matrices need to be the same')
+            idx = len(self.Emat)/3
+            order_emat = int(np.round(-2 + (27*idx+np.sqrt(-3+729*idx**2))**(1/3)/3**(2/3) + 1/(81*idx+3*np.sqrt(-3+729*idx**2))**(1/3), decimals=0))
+            print ('the order in the RUSXYZ class is:      ', self.order)
+            print ('the order in the imported matrices is: ', order_emat)
+            sys.exit()
+
 
 
     def copy_object(self, xyz_object):
