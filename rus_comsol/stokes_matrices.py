@@ -240,6 +240,8 @@ class StokesMatrices:
                     intVals[i] = tmp
                     if i%10==0:
                         print("{}/{}".format(i, len(intBasis)))
+
+            print("CHUNK VOLUME: ", intVals[0])
     
             print("Static Mesh: ", np.allclose(MESH, MESH0))
             tmp = save_path.split("/")
@@ -280,6 +282,12 @@ class StokesMatrices:
 
         print('STL VOLUME:       ', polydata.volume)
         print('STOKES TOTAL VOL: ', fint[0])
+
+        if fint[0]<0:
+            fint = -fint
+            print('the stokes volume is negative!')
+            print('possible reason is wrong sign of normal vectors;')
+            print('will multiply all integral values with a minus sign before saving!')
         np.save(save_path, fint)
     
     

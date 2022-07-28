@@ -200,7 +200,6 @@ class RUSFitting:
 
     def generate_workers(self):
         if isinstance(self.rus_object, RUSXYZ):
-            self.rus_object.load_matrices = True
             self.rus_object.initialize()
         for _ in range(self._nb_workers):
             if isinstance(self.rus_object, RUSComsol):
@@ -221,7 +220,6 @@ class RUSFitting:
                 worker = ray.remote(RUSXYZ).remote(cij_dict=self.rus_object.cij_dict,
                                         symmetry=self.rus_object.symmetry,
                                         density=self.rus_object.density,
-                                        load_matrices=True,
                                         use_quadrants=self.rus_object.use_quadrants,
                                         order=self.rus_object.order,
                                         nb_freq=self.nb_freqs+self.nb_max_missing,
