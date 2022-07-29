@@ -317,6 +317,13 @@ class StokesMatrices:
         IM = np.array([[Ixx, Ixy, Ixz],[Ixy, Iyy, Iyz],[Ixz, Iyz, Izz]])
 
         rotation_matrix = LA.eigh(IM)[1]
+        if LA.det(rotation_matrix)<0:
+            print('')
+            print('the determinant of the rotation matrix is < 0, multiply matrix by -1')
+            print('')
+            rotation_matrix = -rotation_matrix
+            print('it is now: ', LA.det(rotation_matrix))
+            
         rotation_matrix = rotation_matrix.T
 
         tmp = save_path.split("/")

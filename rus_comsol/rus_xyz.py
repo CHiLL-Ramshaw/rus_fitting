@@ -142,13 +142,18 @@ class RUSXYZ(ElasticConstants):
                     w = np.concatenate((w, linalg.eigh(Gmat[np.ix_(self.block[ii], self.block[ii])], self.Emat[np.ix_(self.block[ii], self.block[ii])], eigvals_only=True)))
                 self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
             else:
-                w = linalg.eigh(Gmat, self.Emat, eigvals_only=True)
-                self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+                # w = linalg.eigh(Gmat, self.Emat, eigvals_only=True)
+                # self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+                w = linalg.eigh(Gmat, self.Emat, eigvals_only=True, eigvals=(6,self.nb_freq+5))
+                self.freqs = np.sqrt(np.absolute(np.sort(w)))/(2*np.pi) * 1e-6 # resonance frequencies in MHz
             return self.freqs
         else:
-            w, a = linalg.eigh(Gmat, self.Emat)
-            a = a.transpose()[np.argsort(w)][6:self.nb_freq+6]
-            self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            # w, a = linalg.eigh(Gmat, self.Emat)
+            # a = a.transpose()[np.argsort(w)][6:self.nb_freq+6]
+            # self.freqs = np.sqrt(np.absolute(np.sort(w))[6:self.nb_freq+6])/(2*np.pi) * 1e-6 # resonance frequencies in MHz
+            w, a = linalg.eigh(Gmat, self.Emat, eigvals=(6,self.nb_freq+5))
+            a = a.transpose()[np.argsort(w)]
+            self.freqs = np.sqrt(np.absolute(np.sort(w)))/(2*np.pi) * 1e-6 # resonance frequencies in MHz
             return self.freqs, a
 
 
