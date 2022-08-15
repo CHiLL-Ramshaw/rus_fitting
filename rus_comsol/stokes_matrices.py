@@ -346,7 +346,15 @@ class StokesMatrices:
         if self.surface_file_type in ['stl', 'STL', 'Stl']:
             polydata = self.StlToPolyData(self.surface_path, self.scale)
         elif self.surface_file_type in ['Comsol', 'comsol', 'COMSOL']:
-            polydata = self.NpzToPolyData(self.surface_path, self.scale)
+            tmp         = self.surface_path.split("/")
+            end_tmp     = tmp[-1].split(".")
+            end_tmp[-1] = "npz"
+            end_tmp     = ".".join(end_tmp)
+            tmp[-1]     = end_tmp
+            npz_path    = "/".join(tmp)
+
+            self.getMeshFromComsol(model_path=self.surface_path, save_path=npz_path, component= 'comp1', mesh= 'mesh1')
+            polydata = self.NpzToPolyData(npz_path, self.scale)
         else:
             print('the specified surface_file_type is not valid!')
             print('it must be "stl" or "comsol"')
