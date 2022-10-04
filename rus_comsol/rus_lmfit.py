@@ -353,7 +353,7 @@ class RUSLMFIT:
             if j < len(freqs_data):
                 report+= template.format(*[j, np.round(freqs_data[j],6), np.round(freqs_sim[j],6), np.round(diff[j], 3), np.round(weight[j], 0)]) + '\n'
             else:
-                report+= template.format(*[j, '', np.round(freqs_sim[j],6), '', '']) + '\n'
+                report+= template.format(*[j, 0,                         np.round(freqs_sim[j],6), 0,                    0])                      + '\n'
         report += '#' + '-'*(79) + '\n'
         report += '# RMS = ' + str(np.round(rms,3)) + ' %\n'
         report += '#' + '-'*(79) + '\n'
@@ -386,7 +386,6 @@ class RUSLMFIT:
             freq_text  = self.report_best_freqs(nb_additional_freqs=10)
             der_text = self.rus_object.print_logarithmic_derivative(print_frequencies=False, comsol_start=False)
             self.rus_object.stop_comsol()
-
 
         sample_text = self.report_sample_text()
 

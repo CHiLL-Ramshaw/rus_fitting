@@ -468,7 +468,7 @@ class RUSFitting:
             if j < len(freqs_data):
                 report+= template.format(*[j, np.round(freqs_data[j],6), np.round(freqs_sim[j],6), np.round(diff[j], 3), np.round(weight[j], 0)]) + '\n'
             else:
-                report+= template.format(*[j, '', np.round(freqs_sim[j],6), '', '']) + '\n'
+                 report+= template.format(*[j, 0,                         np.round(freqs_sim[j],6), 0,                    0])                      + '\n'
         report += '#' + '-'*(79) + '\n'
         report += '# RMS = ' + str(np.round(rms,3)) + ' %\n'
         report += '#' + '-'*(79) + '\n'
