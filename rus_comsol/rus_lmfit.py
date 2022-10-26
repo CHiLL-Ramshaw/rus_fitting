@@ -20,7 +20,7 @@ class RUSLMFIT:
                  report_name="",
                  method='differential_evolution',
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
-                 polish=True, updating='immediate', tolerance=0.01):
+                 polish=True, updating='immediate', tolerance=0.01, epsfcn=None, use_Jacobian=False):
         """
         freqs_files should contain experimental resonance frequencies in MHz and a weight
         """
@@ -75,6 +75,9 @@ class RUSLMFIT:
         self.polish        = polish
         self.updating      = updating
         self.tolerance     = tolerance
+        self.epsfcn        = epsfcn
+        self.use_Jacobian  = use_Jacobian
+
 
         self.report_name = report_name
 
@@ -202,6 +205,45 @@ class RUSLMFIT:
         return diff
 
 
+
+    def jacobian_residual_function (self):
+        """
+        define the jacobian of the residual function used in lmfit;
+        i.e. (simulated resonance frequencies - data)
+        """
+        print ('calculate jacobian ...')
+        # alpha is logarithmic derivative, i.e. (df/dc)*(c/f)
+        if isinstance(self.rus_object, RUSXYZ):
+            alpha, f = self.rus_object.log_derivatives_analytical(return_freqs=True)
+        else:
+            print("we can only calculate the jacobian for the RUS_xyz class")
+            sys.exit()
+
+        c_matrix      = np.zeros_like(alpha)
+        f_calc_matrix = np.zeros_like(alpha)
+        f_data_matrix = np.zeros_like(alpha)
+        ii = 0      
+        for el in sorted(self.rus_object.cij_dict):
+            c_matrix[:,ii]      = np.ones(len(f)) * self.rus_object.cij_dict[el]
+            f_calc_matrix[:,ii] = f
+            f_data_matrix[:,ii] = self.freqs_data
+            ii+=1
+        
+        # now we can calculate the derivatives
+        dfdc = alpha * f_calc_matrix / c_matrix
+
+        # residual function is (f-f_data)/f = 1 - f_data/f
+        # the derivative of that is therefore (f_data/f^2) * df/dc
+        d_residual_function = f_data_matrix / f_calc_matrix**2 * dfdc
+
+        
+        print ('calculated jacobian!')
+
+        return d_residual_function
+
+
+
+
     def run_fit (self, print_derivatives=False):
         if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
             print ("the rus_comsol object was not started!")
@@ -217,6 +259,12 @@ class RUSLMFIT:
 
         # run fit
         if self.method == 'differential_evolution':
+            if self.use_Jacobian == True:
+                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+                print()
+                print('using the Jacobian only makes sense if you use a gradient descent fit. It is useless for a differential evolution and will not have any effect on your fit result')
+                print()
+                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
             fit_output = minimize(self.residual_function, self.params, method=self.method,
                                         updating=self.updating,
                                         polish=self.polish,
@@ -226,8 +274,26 @@ class RUSLMFIT:
                                         recombination=self.crossing,
                                         tol=self.tolerance)
         elif self.method == 'leastsq':
+            if self.use_Jacobian==True and len(self.free_pars_name)==len(self.rus_object.cij_dict):
+                # here I define a function calculating the jacobian to be called in "minimize"
+                # however, I don't want it to recalculate the jacobian every time, so I just define my function such that it
+                # calculated it once at the beginning at returns the same one all the time
+                jacobian = self.jacobian_residual_function()
+                def dfunc (params):
+                    return jacobian
+            elif self.use_Jacobian==False and len(self.free_pars_name)==len(self.rus_object.cij_dict):
+                dfunc = None
+            else:
+                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+                print()
+                print('As of now you can only use the Jacobian if the only free parameters are elastic moduli!')
+                print('If you want to use the Jacobian you need to fix angles and other parameters, and not let them vary during the fit!')
+                print()
+                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+                sys.exit()
+                
             fit_output = minimize(self.residual_function, self.params, method=self.method,
-                                  ftol=self.tolerance)
+                                  ftol=self.tolerance, epsfcn=self.epsfcn, Dfun=dfunc)
         else:
             print ('your fit method is not a valid method')
 
@@ -264,12 +330,12 @@ class RUSLMFIT:
 
             if self.errorbars:
                 err = self.fit_output.params[free_name].stderr
-                report+= "\t# " + free_name + " : (" + r"{0:.10f}".format(self.best_pars[free_name]) + " +- " + \
-                         r"{0:.10f}".format(err) + ') ' + unit + \
+                report+= "\t# " + free_name + " : (" + r"{0:.16f}".format(self.best_pars[free_name]) + " +- " + \
+                         r"{0:.16f}".format(err) + ') ' + unit + \
                          " (init = [" + str(self.bounds_dict[free_name]) + \
                          ", " +         unit + "])" + "\n"
             else:
-                report+= "\t# " + free_name + " : " + r"{0:.10f}".format(self.best_pars[free_name]) + " " + \
+                report+= "\t# " + free_name + " : " + r"{0:.16f}".format(self.best_pars[free_name]) + " " + \
                          unit + \
                          " (init = [" + str(self.bounds_dict[free_name]) + \
                          ", " +         unit + "])" + "\n"
@@ -346,16 +412,16 @@ class RUSLMFIT:
         diff = np.abs(freqs_data-freqs_sim[:len(freqs_found) + len(freqs_missing)]) / freqs_sim[:len(freqs_found) + len(freqs_missing)] * 100 * weight
         rms = np.sqrt( np.sum(diff[diff!=0]**2) / len(diff[diff!=0]) )
 
-        template = "{0:<8}{1:<13}{2:<13}{3:<13}{4:<8}"
+        template = "{0:<8}{1:<23}{2:<23}{3:<13}{4:<8}"
         report  = template.format(*['#index', 'f exp(MHz)', 'f calc(MHz)', 'diff (%)', 'weight']) + '\n'
         report += '#' + '-'*(79) + '\n'
         for j in range(len(freqs_sim)):
             if j < len(freqs_data):
-                report+= template.format(*[j, np.round(freqs_data[j],6), np.round(freqs_sim[j],6), np.round(diff[j], 3), np.round(weight[j], 0)]) + '\n'
+                report+= template.format(*[j, np.round(freqs_data[j],16), np.round(freqs_sim[j],16), np.round(diff[j], 3), np.round(weight[j], 0)]) + '\n'
             else:
-                report+= template.format(*[j, 0,                         np.round(freqs_sim[j],6), 0,                    0])                      + '\n'
+                report+= template.format(*[j, 0,                         np.round(freqs_sim[j],16), 0,                    0])                      + '\n'
         report += '#' + '-'*(79) + '\n'
-        report += '# RMS = ' + str(np.round(rms,3)) + ' %\n'
+        report += '# RMS = ' + str(np.round(rms,16)) + ' %\n'
         report += '#' + '-'*(79) + '\n'
 
         return report

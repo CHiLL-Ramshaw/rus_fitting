@@ -8,8 +8,8 @@ class ElasticConstants:
                 angle_x=0, angle_y=0, angle_z=0):
         """
         - The elastic constants in elasti_dict must be in GPa
-        - symmetry can be "cubic", "tetragonal", "orthorhombic"
-        - angles should be in degrees, angle_x corresponds to rotation around x
+        - symmetry can be "cubic", "tetragonal", "orthorhombic", "hexagonal", "rhombohedral"
+        - angles should be in degrees, angle_x corresponds to rotation around x, angle_y around y, and angle_z around z
         """
         self._cij_dict = cij_dict
         self.symmetry  = symmetry

@@ -109,6 +109,8 @@ class ErrorAnalysis:
             error_text += temp_text
         
         if self.save_path is not None:
-            np.savetxt(self.save_path, error_text)
+            report_file = open(self.save_path, "w")
+            report_file.write(error_text)
+            report_file.close()
 
         return error_text
