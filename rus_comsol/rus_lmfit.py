@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial import distance_matrix
-from scipy.optimize import differential_evolution, linear_sum_assignment
+from scipy.optimize import differential_evolution, linear_sum_assignment, leastsq
 import time
 from copy import deepcopy
 import os
@@ -83,6 +83,7 @@ class RUSLMFIT:
 
         ## Empty spaces
         self.rms                = None
+        self.chi2               = None
         self.rms_list           = []
         self.nb_gens            = 0
         self.best_freqs_found   = []
@@ -154,26 +155,44 @@ class RUSLMFIT:
         return freqs_found, index_found, freqs_missing, index_missing
 
 
-    def residual_function (self, pars):
+    def residual_function (self, pars, pars_type='dict'):
         """
         define the residual function used in lmfit;
         i.e. (simulated resonance frequencies - data)
         """
-        ### update elastic constants and angles with current values
-        for free_name in self.free_pars_name:
-            if free_name not in ["angle_x", "angle_y", "angle_z"]:
-                self.best_pars[free_name]     = pars[free_name].value
-                self.best_cij_dict[free_name] = pars[free_name].value
-            elif free_name=='angle_x':
-                self.best_pars[free_name] = pars[free_name].value
-                self.rus_object.angle_x = pars[free_name].value
-            elif free_name=='angle_y':
-                self.best_pars[free_name] = pars[free_name].value
-                self.rus_object.angle_y = pars[free_name].value
-            elif free_name=='angle_z':
-                self.best_pars[free_name] = pars[free_name].value
-                self.rus_object.angle_z = pars[free_name].value
-        self.rus_object.cij_dict = self.best_cij_dict
+        if pars_type=='dict':
+            ### update elastic constants and angles with current values
+            for free_name in self.free_pars_name:
+                if free_name not in ["angle_x", "angle_y", "angle_z"]:
+                    self.best_pars[free_name]     = pars[free_name].value
+                    self.best_cij_dict[free_name] = pars[free_name].value
+                elif free_name=='angle_x':
+                    self.best_pars[free_name] = pars[free_name].value
+                    self.rus_object.angle_x = pars[free_name].value
+                elif free_name=='angle_y':
+                    self.best_pars[free_name] = pars[free_name].value
+                    self.rus_object.angle_y = pars[free_name].value
+                elif free_name=='angle_z':
+                    self.best_pars[free_name] = pars[free_name].value
+                    self.rus_object.angle_z = pars[free_name].value
+            self.rus_object.cij_dict = self.best_cij_dict
+        
+        elif pars_type == 'list':
+            for ii, free_name in enumerate(self.free_pars_name):
+                if free_name not in ["angle_x", "angle_y", "angle_z"]:
+                    self.best_pars[free_name]     = pars[ii]
+                    self.best_cij_dict[free_name] = pars[ii]
+                elif free_name=='angle_x':
+                    self.best_pars[free_name] = pars[ii]
+                    self.rus_object.angle_x   = pars[ii]
+                elif free_name=='angle_y':
+                    self.best_pars[free_name] = pars[ii]
+                    self.rus_object.angle_y   = pars[ii]
+                elif free_name=='angle_z':
+                    self.best_pars[free_name] = pars[ii]
+                    self.rus_object.angle_z   = pars[ii]
+            self.rus_object.cij_dict = self.best_cij_dict
+
 
         # calculate resonances with new parameters
         freqs_sim = self.rus_object.compute_resonances()
@@ -191,6 +210,7 @@ class RUSLMFIT:
         diff = (self.best_freqs_found - self.freqs_data) / self.best_freqs_found * self.weight
         self.rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0])) * 100
         self.rms_list.append(self.rms)
+        self.chi2 = np.sum(diff**2)
 
         print ('NUMBER OF GENERATIONS: ', self.nb_gens)
         print ('BEST PARAMETERS:')
@@ -235,10 +255,8 @@ class RUSLMFIT:
         # residual function is (f-f_data)/f = 1 - f_data/f
         # the derivative of that is therefore (f_data/f^2) * df/dc
         d_residual_function = f_data_matrix / f_calc_matrix**2 * dfdc
-
-        
+  
         print ('calculated jacobian!')
-
         return d_residual_function
 
 
@@ -294,11 +312,45 @@ class RUSLMFIT:
                 
             fit_output = minimize(self.residual_function, self.params, method=self.method,
                                   ftol=self.tolerance, epsfcn=self.epsfcn, Dfun=dfunc)
+        elif self.method == 'scipy.leastsq':
+            if self.use_Jacobian==True and len(self.free_pars_name)==len(self.rus_object.cij_dict):
+                # here I define a function calculating the jacobian to be called in "minimize"
+                # however, I don't want it to recalculate the jacobian every time, so I just define my function such that it
+                # calculated it once at the beginning at returns the same one all the time
+                jacobian = self.jacobian_residual_function()
+                def dfunc (params, x):
+                    return jacobian
+            elif self.use_Jacobian==False and len(self.free_pars_name)==len(self.rus_object.cij_dict):
+                dfunc = None
+            else:
+                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+                print()
+                print('As of now you can only use the Jacobian if the only free parameters are elastic moduli!')
+                print('If you want to use the Jacobian you need to fix angles and other parameters, and not let them vary during the fit!')
+                print()
+                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+                sys.exit()
+            x0 = []
+            for free_name in self.free_pars_name:
+                if free_name not in ["angle_x", "angle_y", "angle_z"]:
+                    x0.append(self.rus_object.cij_dict[free_name])                    
+                elif free_name=='angle_x':
+                    x0.append(self.rus_object.angle_x)
+                elif free_name=='angle_y':
+                    x0.append(self.rus_object.angle_y)
+                elif free_name=='angle_z':
+                    x0.append(self.rus_object.angle_z)
+            fit_output = leastsq(self.residual_function, x0=x0, args=('list'), ftol=self.tolerance, xtol=1e-14, epsfcn=self.epsfcn, full_output=1, Dfun=dfunc)
+
         else:
             print ('your fit method is not a valid method')
 
         self.fit_output = fit_output
-        self.errorbars  = self.fit_output.errorbars
+        if self.method == 'scipy.leastsq':
+            self.errorbars = ( fit_output[1] is not None )
+        else:
+            self.errorbars  = self.fit_output.errorbars
+        
         # stop timer
         self.fit_duration = time.time() - t0
 
@@ -324,12 +376,20 @@ class RUSLMFIT:
 
     def report_best_pars(self):
         report = "#Variables" + '-'*(70) + '\n'
-        for free_name in self.free_pars_name:
+        for ii, free_name in enumerate(self.free_pars_name):
             if free_name[0] == "c": unit = "GPa"
             else: unit = "deg"
 
             if self.errorbars:
-                err = self.fit_output.params[free_name].stderr
+                if self.method == 'scipy.leastsq':
+                    cov_x = self.fit_output[1]
+                    N_points     = self.nb_freqs
+                    N_variables  = len(self.bounds_dict)
+                    reduced_chi2 = self.chi2 / (N_points - N_variables)
+                    err          = np.sqrt( np.diag( cov_x*reduced_chi2 ) )[ii]
+
+                else:
+                    err = self.fit_output.params[free_name].stderr
                 report+= "\t# " + free_name + " : (" + r"{0:.16f}".format(self.best_pars[free_name]) + " +- " + \
                          r"{0:.16f}".format(err) + ') ' + unit + \
                          " (init = [" + str(self.bounds_dict[free_name]) + \
@@ -357,10 +417,22 @@ class RUSLMFIT:
 
     def report_fit(self):
         fit_output  = self.fit_output
+        if self.method == 'scipy.leastsq':
+            x, cov_x, infodict, mesg, ier = fit_output
+            success = ( ier in np.array([1,2,3,4], dtype=int) )
+            nfev    = infodict['nfev']
+            chi2    = self.chi2
+        else:
+            chi2    = fit_output.chisqr
+            success = fit_output.success
+            nfev    = fit_output.nfev
+
+
+
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
         N_variables = len(self.bounds_dict)
-        chi2 = fit_output.chisqr
+        
         reduced_chi2 = chi2 / (N_points - N_variables)
         report = "#Fit Statistics" + '-'*(65) + '\n'
         report+= "\t# Fitting Class      \t= rus_lmfit\n"
@@ -368,9 +440,9 @@ class RUSLMFIT:
         report+= "\t# polish             \t= " + str(self.polish) + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
         report+= "\t# variables          \t= " + str(N_variables) + "\n"
-        report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
+        report+= "\t# fit success        \t= " + str(success) + "\n"
         # report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
-        report+= "\t# function evals     \t= " + str(fit_output.nfev) + "\n"
+        report+= "\t# function evals     \t= " + str(nfev) + "\n"
         report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
         report+= "\t# chi-square         \t= " + r"{0:.8f}".format(chi2) + "\n"
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
