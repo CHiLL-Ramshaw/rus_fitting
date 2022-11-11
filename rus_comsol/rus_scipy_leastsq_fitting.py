@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial import distance_matrix
-from scipy.optimize import differential_evolution, linear_sum_assignment
+from scipy.optimize import differential_evolution, linear_sum_assignment, leastsq
 import time
 from copy import deepcopy
 import os
@@ -9,18 +9,12 @@ from IPython.display import clear_output
 from psutil import cpu_count
 from rus_comsol.rus_comsol import RUSComsol
 from rus_comsol.rus_xyz import RUSXYZ
-from lmfit import minimize, Parameters, fit_report
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-class RUSLMFIT:
+class RUSSCIPYLEASTSQ:
     def __init__(self, rus_object, bounds_dict,
-                 freqs_file,
-                 nb_freqs,
-                 nb_max_missing=0,
-                 report_name="",
-                 method='differential_evolution',
-                 population=15, N_generation=10000, mutation=0.7, crossing=0.9,
-                 polish=True, updating='immediate', tolerance=0.01, epsfcn=None, use_Jacobian=False):
+                 freqs_file, nb_freqs, nb_max_missing=0, report_name="",
+                 tolerance=0.01, xtol=1e-5, epsfcn=None, use_Jacobian=False):
         """
         freqs_files should contain experimental resonance frequencies in MHz and a weight
         """
@@ -55,34 +49,22 @@ class RUSLMFIT:
         self.load_data()
 
 
-        ## fit algorithm
-        self.method    = method # "shgo", "differential_evolution", "leastsq"
+        ## fit algorith
         self.errorbars = False # True if uncertainties have been calculated, False if not
 
-        ## set up fit parameters for lmfit
-        self.params = Parameters()
-        for param in self.free_pars_name:
-            self.params.add(param, value=self.init_pars[param], vary=True, min=self.bounds_dict[param][0], max=self.bounds_dict[param][1])
-        for param in self.fixed_pars_name:
-            self.params.add(param, value=self.init_pars[param], vary=False)
 
-
-        ## Differential evolution
-        self.population    = population # (popsize = population * len(x))
-        self.N_generation  = N_generation
-        self.mutation      = mutation
-        self.crossing      = crossing
-        self.polish        = polish
-        self.updating      = updating
+        ## scipy leastsq parameters
         self.tolerance     = tolerance
         self.epsfcn        = epsfcn
         self.use_Jacobian  = use_Jacobian
+        self.xtol          = xtol
 
 
         self.report_name = report_name
 
         ## Empty spaces
         self.rms                = None
+        self.chi2               = None
         self.rms_list           = []
         self.nb_gens            = 0
         self.best_freqs_found   = []
@@ -156,23 +138,23 @@ class RUSLMFIT:
 
     def residual_function (self, pars):
         """
-        define the residual function used in lmfit;
+        define the residual function used in scipy.optimize.leastsq;
         i.e. (simulated resonance frequencies - data)
         """
-        ### update elastic constants and angles with current values
-        for free_name in self.free_pars_name:
+        
+        for ii, free_name in enumerate(self.free_pars_name):
             if free_name not in ["angle_x", "angle_y", "angle_z"]:
-                self.best_pars[free_name]     = pars[free_name].value
-                self.best_cij_dict[free_name] = pars[free_name].value
+                self.best_pars[free_name]     = pars[ii]
+                self.best_cij_dict[free_name] = pars[ii]
             elif free_name=='angle_x':
-                self.best_pars[free_name] = pars[free_name].value
-                self.rus_object.angle_x = pars[free_name].value
+                self.best_pars[free_name] = pars[ii]
+                self.rus_object.angle_x   = pars[ii]
             elif free_name=='angle_y':
-                self.best_pars[free_name] = pars[free_name].value
-                self.rus_object.angle_y = pars[free_name].value
+                self.best_pars[free_name] = pars[ii]
+                self.rus_object.angle_y   = pars[ii]
             elif free_name=='angle_z':
-                self.best_pars[free_name] = pars[free_name].value
-                self.rus_object.angle_z = pars[free_name].value
+                self.best_pars[free_name] = pars[ii]
+                self.rus_object.angle_z   = pars[ii]
         self.rus_object.cij_dict = self.best_cij_dict
 
         # calculate resonances with new parameters
@@ -191,6 +173,7 @@ class RUSLMFIT:
         diff = (self.best_freqs_found - self.freqs_data) / self.best_freqs_found * self.weight
         self.rms = np.sqrt(np.sum((diff[diff!=0])**2) / len(diff[diff!=0])) * 100
         self.rms_list.append(self.rms)
+        self.chi2 = np.sum(diff**2)
 
         print ('NUMBER OF GENERATIONS: ', self.nb_gens)
         print ('BEST PARAMETERS:')
@@ -222,23 +205,21 @@ class RUSLMFIT:
         c_matrix      = np.zeros_like(alpha)
         f_calc_matrix = np.zeros_like(alpha)
         f_data_matrix = np.zeros_like(alpha)
-        ii = 0
+        ii = 0      
         for el in sorted(self.rus_object.cij_dict):
             c_matrix[:,ii]      = np.ones(len(f)) * self.rus_object.cij_dict[el]
             f_calc_matrix[:,ii] = f
             f_data_matrix[:,ii] = self.freqs_data
             ii+=1
-
+        
         # now we can calculate the derivatives
         dfdc = alpha * f_calc_matrix / c_matrix
 
         # residual function is (f-f_data)/f = 1 - f_data/f
         # the derivative of that is therefore (f_data/f^2) * df/dc
         d_residual_function = f_data_matrix / f_calc_matrix**2 * dfdc
-
-
+  
         print ('calculated jacobian!')
-
         return d_residual_function
 
 
@@ -257,69 +238,47 @@ class RUSLMFIT:
         # start timer
         t0 = time.time()
 
-        # run fit
-        if self.method == 'differential_evolution':
-            if self.use_Jacobian == True:
-                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
-                print()
-                print('using the Jacobian only makes sense if you use a gradient descent fit. It is useless for a differential evolution and will not have any effect on your fit result')
-                print()
-                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
-            fit_output = minimize(self.residual_function, self.params, method=self.method,
-                                        updating=self.updating,
-                                        polish=self.polish,
-                                        maxiter=self.N_generation,
-                                        popsize=self.population,
-                                        mutation=self.mutation,
-                                        recombination=self.crossing,
-                                        tol=self.tolerance)
-        elif self.method == 'leastsq':
-            if self.use_Jacobian==True and len(self.free_pars_name)==len(self.rus_object.cij_dict):
-                # here I define a function calculating the jacobian to be called in "minimize"
-                # however, I don't want it to recalculate the jacobian every time, so I just define my function such that it
-                # calculated it once at the beginning at returns the same one all the time
-                jacobian = self.jacobian_residual_function()
-                def dfunc (params):
-                    return jacobian
-            elif self.use_Jacobian==False and len(self.free_pars_name)==len(self.rus_object.cij_dict):
-                dfunc = None
-            else:
-                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
-                print()
-                print('As of now you can only use the Jacobian if the only free parameters are elastic moduli!')
-                print('If you want to use the Jacobian you need to fix angles and other parameters, and not let them vary during the fit!')
-                print()
-                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
-                sys.exit()
-
-            fit_output = minimize(self.residual_function, self.params, method=self.method,
-                                  ftol=self.tolerance, epsfcn=self.epsfcn, Dfun=dfunc)
-        elif self.method == 'least_squares':
-            if self.use_Jacobian==True and len(self.free_pars_name)==len(self.rus_object.cij_dict):
-                # here I define a function calculating the jacobian to be called in "minimize"
-                # however, I don't want it to recalculate the jacobian every time, so I just define my function such that it
-                # calculated it once at the beginning at returns the same one all the time
-                jacobian = self.jacobian_residual_function()
-                def dfunc (params):
-                    return jacobian
-            elif self.use_Jacobian==False and len(self.free_pars_name)==len(self.rus_object.cij_dict):
-                dfunc = '3-point'
-            else:
-                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
-                print()
-                print('As of now you can only use the Jacobian if the only free parameters are elastic moduli!')
-                print('If you want to use the Jacobian you need to fix angles and other parameters, and not let them vary during the fit!')
-                print()
-                print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
-                sys.exit()
-
-            fit_output = minimize(self.residual_function, self.params, method=self.method,
-                                  ftol=self.tolerance, jac=dfunc)
+        # define jacobian function
+        if self.use_Jacobian==True and len(self.free_pars_name)==len(self.rus_object.cij_dict):
+            # here I define a function calculating the jacobian to be called in "minimize"
+            # however, I don't want it to recalculate the jacobian every time, so I just define my function such that it
+            # calculated it once at the beginning at returns the same one all the time
+            jacobian = self.jacobian_residual_function()
+            def dfunc (params):
+                return jacobian
+        elif self.use_Jacobian==False and len(self.free_pars_name)==len(self.rus_object.cij_dict):
+            dfunc = None
         else:
-            print ('your fit method is not a valid method')
+            print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+            print()
+            print('As of now you can only use the Jacobian if the only free parameters are elastic moduli!')
+            print('If you want to use the Jacobian you need to fix angles and other parameters, and not let them vary during the fit!')
+            print('The following fit will NOT be using the Jacobian')
+            print()
+            print('->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->->')
+            dfunc = None
 
+
+        # create list of initial parameters
+        x0 = []
+        for free_name in self.free_pars_name:
+            if free_name not in ["angle_x", "angle_y", "angle_z"]:
+                x0.append(self.rus_object.cij_dict[free_name])                    
+            elif free_name=='angle_x':
+                x0.append(self.rus_object.angle_x)
+            elif free_name=='angle_y':
+                x0.append(self.rus_object.angle_y)
+            elif free_name=='angle_z':
+                x0.append(self.rus_object.angle_z)
+        # run fit
+        fit_output = leastsq(self.residual_function, x0=x0, ftol=self.tolerance, xtol=self.xtol, epsfcn=self.epsfcn, full_output=1, Dfun=dfunc)
+
+        # fit out put
         self.fit_output = fit_output
-        self.errorbars  = self.fit_output.errorbars
+        # ask if error bars have been calculated
+        self.errorbars = ( fit_output[1] is not None )
+
+        
         # stop timer
         self.fit_duration = time.time() - t0
 
@@ -345,12 +304,17 @@ class RUSLMFIT:
 
     def report_best_pars(self):
         report = "#Variables" + '-'*(70) + '\n'
-        for free_name in self.free_pars_name:
+        for ii, free_name in enumerate(self.free_pars_name):
             if free_name[0] == "c": unit = "GPa"
             else: unit = "deg"
 
             if self.errorbars:
-                err = self.fit_output.params[free_name].stderr
+                cov_x        = self.fit_output[1]
+                N_points     = self.nb_freqs
+                N_variables  = len(self.bounds_dict)
+                reduced_chi2 = self.chi2 / (N_points - N_variables)
+                err          = np.sqrt( np.diag( cov_x*reduced_chi2 ) )[ii]
+
                 report+= "\t# " + free_name + " : (" + r"{0:.16f}".format(self.best_pars[free_name]) + " +- " + \
                          r"{0:.16f}".format(err) + ') ' + unit + \
                          " (init = [" + str(self.bounds_dict[free_name]) + \
@@ -378,20 +342,25 @@ class RUSLMFIT:
 
     def report_fit(self):
         fit_output  = self.fit_output
+        _, _, infodict, _, ier = fit_output
+        success = ( ier in np.array([1,2,3,4], dtype=int) )
+        nfev    = infodict['nfev']
+        chi2    = self.chi2
+
+
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
         N_variables = len(self.bounds_dict)
-        chi2 = fit_output.chisqr
+        
         reduced_chi2 = chi2 / (N_points - N_variables)
         report = "#Fit Statistics" + '-'*(65) + '\n'
         report+= "\t# Fitting Class      \t= rus_lmfit\n"
-        report+= "\t# fitting method     \t= " + self.method + "\n"
-        report+= "\t# polish             \t= " + str(self.polish) + "\n"
+        report+= "\t# fitting method     \t= " + 'scipy.optmimize.leastsq' + "\n"
         report+= "\t# data points        \t= " + str(N_points) + "\n"
         report+= "\t# variables          \t= " + str(N_variables) + "\n"
-        report+= "\t# fit success        \t= " + str(fit_output.success) + "\n"
+        report+= "\t# fit success        \t= " + str(success) + "\n"
         # report+= "\t# generations        \t= " + str(fit_output.nit) + " + 1" + "\n"
-        report+= "\t# function evals     \t= " + str(fit_output.nfev) + "\n"
+        report+= "\t# function evals     \t= " + str(nfev) + "\n"
         report+= "\t# fit duration       \t= " + str(duration) + " seconds" + "\n"
         report+= "\t# chi-square         \t= " + r"{0:.8f}".format(chi2) + "\n"
         report+= "\t# reduced chi-square \t= " + r"{0:.8f}".format(reduced_chi2) + "\n"
