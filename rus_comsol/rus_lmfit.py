@@ -44,7 +44,7 @@ class RUSLMFIT:
 
 
         ## Load data
-        if (use_Jacobian==True) & (nb_freqs!=0):
+        if (use_Jacobian==True) & (nb_max_missing!=0):
             print()
             print('You can only use the Jacobian if you have zero missing frequencies!')
             print('nb_max_missing has been set to zero in the following fit')

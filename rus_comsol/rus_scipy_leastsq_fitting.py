@@ -38,6 +38,12 @@ class RUSSCIPYLEASTSQ:
 
 
         ## Load data
+        if (use_Jacobian==True) & (nb_max_missing!=0):
+            print()
+            print('You can only use the Jacobian if you have zero missing frequencies!')
+            print('nb_max_missing has been set to zero in the following fit')
+            print()
+            nb_max_missing = 0
         self.nb_freqs           = nb_freqs
         self.nb_missing         = nb_max_missing
         self.rus_object.nb_freq = nb_freqs + nb_max_missing
