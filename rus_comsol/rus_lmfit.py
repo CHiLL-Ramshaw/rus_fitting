@@ -7,8 +7,8 @@ import os
 import sys
 from IPython.display import clear_output
 from psutil import cpu_count
-from rus_comsol.rus_comsol import RUSComsol
 from rus_comsol.rus_xyz import RUSXYZ
+from rus_comsol.rus_comsol import RUSComsol
 from lmfit import minimize, Parameters, fit_report
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

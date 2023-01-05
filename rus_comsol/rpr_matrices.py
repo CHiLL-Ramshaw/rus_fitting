@@ -4,7 +4,6 @@ import numpy as np
 from numpy import sin, cos, tan, arcsin, arccos, arctan2, pi
 from scipy.spatial.transform import Rotation as R
 from time import time
-import quadpy
 from copy import deepcopy
 import mph
 import os

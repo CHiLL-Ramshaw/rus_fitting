@@ -4,7 +4,8 @@ import numpy as np
 from numpy import sin, cos, tan, arcsin, arccos, arctan2, pi
 from scipy.spatial.transform import Rotation
 from time import time
-import quadpy
+# import quadpy
+from rus_comsol import quadpylight
 from copy import deepcopy
 import multiprocessing as mp
 from itertools import repeat
@@ -99,7 +100,8 @@ class StokesMatrices:
         integrates x**N * y**M * z**L over the interior of the mesh
         vecotrized to do the integrals over all the triangles
         '''
-        scheme = quadpy.t2.get_good_scheme(40)
+        # scheme = quadpy.t2.get_good_scheme(40)
+        scheme = quadpylight.t2.get_good_scheme(40)
         N, M, L = exp[0], exp[1], exp[2]+1
         vol = scheme.integrate(lambda x: self.intVecInPlace(x, [N,M,L], mesh), triangles)
         vol = self.kahanSum(vol)
@@ -171,7 +173,8 @@ class StokesMatrices:
         return polydata
     
     def StlToPolyData(self, stl_file, scale):
-        scheme   = quadpy.t2.get_good_scheme(40)
+        # scheme   = quadpy.t2.get_good_scheme(40)
+        scheme   = quadpylight.t2.get_good_scheme(40)
         polydata = pv.PolyData(stl_file)
         polydata = polydata.scale(scale)
         return polydata

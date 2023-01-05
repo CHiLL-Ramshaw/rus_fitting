@@ -8,10 +8,11 @@ import sys
 from IPython.display import clear_output
 import ray
 from psutil import cpu_count
+from rus_comsol.stokes_matrices import StokesMatrices
 from rus_comsol.rus_comsol import RUSComsol
 from rus_comsol.rus_xyz import RUSXYZ
 from rus_comsol.rpr_matrices import RPRMatrices
-from rus_comsol.stokes_matrices import StokesMatrices
+
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 class RUSFitting:
