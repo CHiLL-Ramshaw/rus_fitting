@@ -2,3 +2,8 @@
 *
 # Except this file
 !.gitignore
+!ReadMe.txt
+!ResonanceList.dat
+!Comsol
+!RPR
+!SMI

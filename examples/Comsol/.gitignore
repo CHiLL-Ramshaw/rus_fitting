@@ -1,0 +1,7 @@
+# Ignore everything in this directory
+*
+# Except this file
+!.gitignore
+!ResonanceList.dat
+!comsol_fit.py
+!comsol_file.mph
