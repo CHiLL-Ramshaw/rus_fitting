@@ -1,0 +1,9 @@
+{
+  "name": "Xiao-Gimbutas 2",
+  "domain": "T2",
+  "degree": 2,
+  "test_tolerance": 4.441e-16,
+  "data": {
+    "d3_aa": [[3.3333333333333333e-1], [1.6666666666666667e-1]]
+  }
+}
