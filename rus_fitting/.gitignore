@@ -4,11 +4,10 @@
 !.gitignore
 !elastic_constants.py
 !rus_comsol.py
-!rus.fitting.py
-!rus_lmfit.py
-!old_version.zip
-!stokes_matrices.py
+!rus.fitting_ray.py
+!rus.fitting_lmfit.py
+!rus.fitting_scipy_leastsq.py
+!smi_matrices.py
 !rpr_matrices.py
 !rus_xyz.py
-!error_analysis.py
-!rus_scipy_leastsq_fitting.py
+!format_resonances_for_fit.py
