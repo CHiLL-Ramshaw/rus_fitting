@@ -1,5 +1,5 @@
 import mph
-from rus_comsol.elastic_constants import ElasticConstants
+from rus_fitting.elastic_constants import ElasticConstants
 from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt

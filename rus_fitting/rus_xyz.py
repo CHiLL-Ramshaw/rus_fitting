@@ -3,10 +3,10 @@ import numpy as np
 from scipy import linalg
 import sys
 from copy import deepcopy
-from rus_comsol.elastic_constants import ElasticConstants
+from rus_fitting.elastic_constants import ElasticConstants
 from time import time, sleep
-from rus_comsol.stokes_matrices import StokesMatrices
-from rus_comsol.rpr_matrices import RPRMatrices
+from rus_fitting.smi_matrices import StokesMatrices
+from rus_fitting.rpr_matrices import RPRMatrices
 import matplotlib.pyplot as plt
 from numpy.polynomial import polynomial
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
