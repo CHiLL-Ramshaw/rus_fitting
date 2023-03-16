@@ -33,13 +33,15 @@ report_name = f'fit_report.txt'
 freqs_file  = "ResonanceList.dat"
 mph_file    = 'comsol_file.mph'
 
+
+print("create RUSComsol object")
 rus_object = RUSComsol(cij_dict=elastic_dict, symmetry="cubic",
                        density =density,
                        mph_file=mph_file,
                        mesh=mesh,nb_freq=nb_freq)
 rus_object.start_comsol()
 
-
+print("start fitting ...")
 fit = RUSSCIPYLEASTSQ(rus_object, bounds_dict,
                         freqs_file=freqs_file, nb_freqs=nb_freq, nb_max_missing=nb_missing,
                         use_Jacobian=False, tolerance=1e-10, report_name=report_name)
