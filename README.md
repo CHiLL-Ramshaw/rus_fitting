@@ -26,3 +26,16 @@ The SMI forward solver can compute resonance spectra for irregularly shaped samp
 The Comsol forward solver can compute resonance spectra for irregularly shaped samples. A comsol .mph file with the correct physics module needs to be loaded. A typical workflow looks as follows:
 - create an RUS object with "rus_comsol.py"
 - pass the RUS object to a fitting class and run the fit
+
+
+# Fitting Classes
+All fitting classes have an RUS object as one of their attributes.
+
+## rus_fitting_ray.py
+Uses ray (https://www.ray.io/) to parallelize the differential evolution algorithm scipy.optimize.differential_evolution (https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.differential_evolution.html).
+
+## rus_fitting_lmfit.py
+Uses the lmfit package (https://lmfit.github.io/lmfit-py/). Implemented are the "differential_evolution" and "leastsq" methods.
+
+## rus_fitting_scipy_leastsq.py
+Uses scipy.optimize.leastsq (https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.leastsq.html) to perform only gradient descent fits.
