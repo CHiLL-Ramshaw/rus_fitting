@@ -299,6 +299,14 @@ class ElasticConstants:
         self.cijkl = cijkl
         return cijkl
 
+    
+    def check_cholesky (self):
+        try:
+            np.linalg.cholesky(self.voigt_matrix)
+            print("good cholesky!")
+        except:
+            print("bad cholseky!")
+
 
     # def cij_dict_to_tensor (self, angle_x=None, angle_y=None, angle_z=None, cij_dict=None):
     #     if angle_x is None:
@@ -389,15 +397,10 @@ class ElasticConstants:
 
 
 if __name__=="__main__":
-    cij_dict = {'c11':110, 'c33':90, 'c13':70, 'c12':50, 'c44':30, 'c66':10}
-    e1 = ElasticConstants(cij_dict, symmetry="tetragonal")
-    print(e1.voigt_matrix)
-    for key in sorted(e1.voigt_dict.keys()):
-        print(key, e1.voigt_dict[key])
-    e1.angle_x = 5
-    e1.angle_z = 15
-    print(np.round(e1.voigt_matrix, 0))
-    for key in sorted(e1.voigt_dict.keys()):
-        print(key, e1.voigt_dict[key])
+    cij_dict = {'c11':110, 'c33':30, 'c13':40, 'c12':40, 'c44':30}
+    e = ElasticConstants(cij_dict, symmetry="hexagonal")
+    print(e.voigt_matrix)
+    e.check_cholesky()
+
 
 

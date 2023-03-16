@@ -16,7 +16,7 @@ class RUSXYZ(ElasticConstants):
                  Emat_path = None, Itens_path = None,
                  nb_freq=1,
                  angle_x=0, angle_y=0, angle_z=0,
-                 init=False, use_quadrants=True):
+                 init=False, use_quadrants=False):
         """
         cij_dict: a dictionary of elastic constants in GPa
         mass: a number in kg

@@ -1,19 +1,14 @@
-# # Ignore everything in this directory
-# *
-# # Except this file
-# !.gitignore
-# !elastic_constants.py
-# !rus_comsol.py
-# !rus.fitting.py
-# !rus_lmfit.py
-# !old_version.zip
-# !stokes_matrices.py
-# !rpr_matrices.py
-# !rus_xyz.py
-# !error_analysis.py
-# !rus_scipy_leastsq_fitting.py
-# !quadpylight/*
-
-
-__pycache__/*
-old/*
+# Ignore everything in this directory
+*
+# Except this file
+!.gitignore
+!elastic_constants.py
+!rus_comsol.py
+!rus.fitting.py
+!rus_lmfit.py
+!old_version.zip
+!stokes_matrices.py
+!rpr_matrices.py
+!rus_xyz.py
+!error_analysis.py
+!rus_scipy_leastsq_fitting.py
