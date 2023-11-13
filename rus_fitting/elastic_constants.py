@@ -7,9 +7,10 @@ class ElasticConstants:
     def __init__(self, cij_dict, symmetry,
                 angle_x=0, angle_y=0, angle_z=0):
         """
-        - The elastic constants in elasti_dict must be in GPa
-        - symmetry can be "cubic", "tetragonal", "orthorhombic", "hexagonal", "rhombohedral"
-        - angles should be in degrees, angle_x corresponds to rotation around x, angle_y around y, and angle_z around z
+        - class deals with the elastic tensor: main objective is to rotate elastic moduli
+        - cij_dict: dictionary of elastic constants in Voigt notation (units are GPa)
+        - symmetry: symmetry of the crystal lattice; options are: "cubic", "tetragonal", "orthorhombic", "hexagonal", "rhombohedral"
+        - angle_i: rotation around i axis in degrees
         """
         self._cij_dict = cij_dict
         self.symmetry  = symmetry
@@ -90,9 +91,7 @@ class ElasticConstants:
 
     def cij_dict_to_voigt_matrix(self):
         """
-        returns the elastic tensor from given elastic constants in pars
-        (a dictionary of elastic constants)
-        based on the length of pars it decides what crystal structure we the sample has
+        converts dictionary of elastic constants to 6x6 matrix in Voigt notation
         """
         voigt_matrix = np.zeros((6,6))
 
@@ -183,6 +182,9 @@ class ElasticConstants:
 
 
     def voigt_matrix_to_voigt_dict(self):
+        """
+        convert 6x6 matrix of elastic contants in Voigt notation to dictionary of elastic constants
+        """
         self.voigt_dict = {}
         voigt_matrix = np.triu(self.voigt_matrix) # get only upper part of the matrix
         for i in range(6):
@@ -193,9 +195,9 @@ class ElasticConstants:
 
     def rotation_matrix(self):
         """
-        define general 3D rotation matrix with rotation angles angle_x, angle_y, angle_z about x, y, z
-        axes respectively;
-        angles are given in degrees
+        - define general 3D rotation matrix with rotation angles angle_x, angle_y, angle_z about x, y, z axes respectively
+        - angles are given in degrees
+        - order of rotation is (from first to last): x, y, z
         """
         angle_x = np.deg2rad(self.angle_x)
         angle_y = np.deg2rad(self.angle_y)
@@ -215,6 +217,9 @@ class ElasticConstants:
 
 
     def rotation_voigt(self):
+        """
+        rotate 6x6 matrix of elastic constants in Voigt notation
+        """
         R = self.R
         M = np.array([
         [R[0,0]**2,
@@ -283,9 +288,7 @@ class ElasticConstants:
 
     def voigt_matrix_to_tensor(self):
         """
-        returns the elastic tensor from given elastic constants in pars
-        (a dictionary of elastic constants)
-        based on the length of pars it decides what crystal structure we the sample has
+        returns the elastic tensor from 6x6 matrix of elastic constants in Voigt notation
         """
         cijkl = np.zeros([3,3,3,3])
         lookup = {(0,0):0, (1,1):1, (2,2):2, (1,2):3, (2,1):3, (0,2):4, (2,0):4, (0,1):5, (1,0):5}
