@@ -12,6 +12,20 @@ import scipy
 class ErrorAnalysis:
 
     def __init__(self, rus_object, fit_report_path, percent=2, scan_width=15, save_path=None):
+        """
+        - calculates an uncertainty of elastic constants from an RUS fit:
+        - the uncertainty is defined as: how much do we have to change a given elastic constant such that the RMS increases by "percent" percent?
+            - define a residual function, which gives the relative change in RMS with respect to the original fit minus "percent"
+            - use scipy.optimize.brentq to find the root of the residual fct within a range of elastic moduli given by "scan_width"
+            - the root is the uncertainty
+            - this uncertainty can be different for values above/below the original fit result; the maximum uncertainty is picked here
+        - rus_object: an RUS object used to calculate resonance frequencies from set of elastic constants (can be RUSComsol or RUSXYZ)
+            - rus_object needs to be initialized with "correct" elastic constants from original fit
+        - fit_report_path: location of the fit report: mostly used to extract experimental resonances used in fit to get accurate RMS
+        - percent (2 %): how much do you want your RMS to increase for your definition of the uncertainty
+        - scan width (15 GPa): how far away from the original elastic constants in fit_report_path are you looking for a "percent" increase of the RMS
+        - save_path (None): where do you want to save the result of the error analysis (won't be saved if None)
+        """
         self.rus_object = rus_object
         self.fit_report = fit_report_path
         self.save_path  = save_path
@@ -31,6 +45,9 @@ class ErrorAnalysis:
 
 
     def load_data (self, fit_report):
+        """
+        import experimental resonances from fit report
+        """
         data   = np.loadtxt(fit_report).T
         index  = data[0].astype(int)
         fexp   = data[1]
@@ -52,6 +69,9 @@ class ErrorAnalysis:
 
 
     def find_rms(self, el_dict):
+        """
+        calculate the RMS of experimental resonances minus resonances of self.rus_object calculated with elastic constants in el_dict
+        """
         self.rus_object.cij_dict = el_dict
         freqs_sim = self.rus_object.compute_resonances()
 
@@ -63,6 +83,9 @@ class ErrorAnalysis:
 
 
     def residual_function(self, el_const_value, el_const_name, percent):
+        """
+        define residual function as relative change of rms with respect to fit result minus "percent"
+        """
         el_dict                = deepcopy(self.original_cij_dict)
         el_dict[el_const_name] = el_const_value
 
@@ -73,6 +96,10 @@ class ErrorAnalysis:
 
 
     def find_single_root (self, el_const_name, percent, scan_width=15):
+        """
+        - find uncertainty of one elastic constant defined by "el_const_name" by finding root of self.residual_function
+        - find root above and below original value; use maximum difference as uncertainty
+        """
         el_const_initial = self.original_cij_dict[el_const_name]
 
         # find root above the initial value
@@ -96,6 +123,9 @@ class ErrorAnalysis:
 
 
     def find_all_errors (self):
+        """
+        find uncertainties of all elastic constants by repeating self.find_single_root
+        """
         error_text = f'the rms changes by {self.percent} % if we change the elastic moduli by:'
         print(error_text)
         for cij in self.original_cij_dict:
