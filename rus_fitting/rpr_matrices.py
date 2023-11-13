@@ -11,7 +11,6 @@ import os
 
 
 class RPRMatrices:
-
     def __init__(self, order, dimensions,
                  Emat_path, Itens_path):
 
