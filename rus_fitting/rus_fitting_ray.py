@@ -15,7 +15,7 @@ from rus_fitting.rpr_matrices import RPRMatrices
 
 ##<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-class RUSFitting:
+class RUSRAY:
     def __init__(self, rus_object, bounds_dict,
                  freqs_file,
                  nb_freqs,

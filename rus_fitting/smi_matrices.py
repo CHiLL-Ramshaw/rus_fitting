@@ -20,7 +20,23 @@ class SMIMatrices:
                 surface_path, integral_path, E_path, I_path,
                 scale='m', parallel=True, nb_processes=1, shift_com=False,
                 rotation_matrix=None, find_good_rotation=False):
-
+        """
+        SMIMatrices calculates the kinetic (Emat) and potential (Itens) energy matrices for an irregularly shaped sample described by a 3D mesh;
+        First, it calculates a general matrix of integral values of polynomials. It then uses these values to populate Emat and Itens matrices
+        follows discussion in https://doi.org/10.1121/10.0016813
+        - basis_order (int): the highest order of the cartesian polynomials used in the expansion of the displacement (used to calculate Emat and Itens)
+        - surface_file_type (str): can be 'stl' or 'comsol': is your 3D surface given in a .stl file or is it in a comsol file
+        - surface_path (str): directory of the .stl or comsol file of the surface
+        - integral_path (str): directory of where you want to save the matrix of integral values of cartesian polynomials
+        - E_path (str): directory of where you want to save the calculated kinetic energy matrix
+        - I_path (str): directory of where you want to save the calculated potential energy matrix
+        - scale (str): can be 'm', 'cm', 'mm': what is the scale of length used in the mesh (for most surface files from CT scans it is 'mm')
+        - parallel (bool): integrals for Emat, Itens need to be performed over all triangles of the mesh. If parallel==True, integration of different triangles is parallelized
+        - nb_processes (int): number of proecsses used if parallel==True
+        - shift_com (bool): it True, the surface mesh is translated such that it's center of mass is at (0,0,0) - this is helpful for higher chances of non-singular Emat
+        - rotation_matrix (np.array): if a matrix is given (instead of None), the surface mesh will be rotated as defined by this matrix before integrals are calculated
+        - find_good_rotation (bool): if True, a rotation matrix is calculated which will maximise chances of non-singular Emat, if surface mesh is rotated around it
+        """
         self.basis_order = basis_order
         scale_lookup     = {'m': 1, 'cm':1e-2, 'mm':1e-3}
         self.scale       = scale_lookup[scale]
@@ -61,14 +77,19 @@ class SMIMatrices:
         '''
         give a set of exponents (N,M,L) and a mesh points/faces
         integrates x**N * y**M * z**L over the interior of the mesh
-        using the given in quadpy scheme
+        using the given scheme in quadpy
+        - mesh_pts is a Nx3 array where each row is a mesh point
+        - mesh_faces is Mx3 array, where each row is a triangle. Each column is an index referring to a row in mesh_pts
         '''
         vol = 0.
         numz= 0
         N, M, L = exp[0], exp[1], exp[2]+1
         for idx, f in enumerate(mesh_faces):
             t = [mesh_pts[f[0]], mesh_pts[f[1]], mesh_pts[f[2]]]
+            # "triangle" is literally just the triangle given by t projected onto x-y plane (i.e, setting z=0)
             triangle = np.array([[t[0][0], t[0][1]], [t[1][0], t[1][1]], [t[2][0],t[2][1]]])
+            # the way scheme.integrate works is that it pretty much just evaluates the fuction to be integrated at several points inside the triangle (called triangle here)
+            # so what scheme.integrate passes to the function is a 2x1 array (i.e. a point in 2D), NOT the 3x2 array of triangle
             tmp = scheme.integrate(lambda x: self.intInPlace(x, [N,M,L], t), triangle)
             if tmp==0: numz += 1
             vol += tmp
@@ -77,19 +98,36 @@ class SMIMatrices:
         return vol/L
     
     def intInPlace(self, X, exp, t):
+        """
+        integrate polynomial X[0]^exp[0] X[1]^exp[1] X[2]^exp[2] over triangle given by t;
+        this is where projection of the triangle on plane comes in (see https://doi.org/10.1121/10.0016813)
+        - X: the way quadpy integrates is by evaluating this function at many different points inside the triangle. X is just a point inside the triangle, i.e. X  [X[0],X[1]]
+        - exp = n, m, l: exponents for x, y, z coordinate of cartesian polynomial
+        - t: 3x3 array of 3D points making a triangle
+        """
         n, m, l = exp
         p0, p1, p2 = t
         p1 = p1 - p0
         p2 = p2 - p0
-        n0 = np.cross(p1, p2)
-    
+        n0 = np.cross(p1, p2) # this is a vector normal to the triangle
+
+        # n0 is the normal vector of the triangle which we want to integrate over
+        # if n0[2]==0, that means that the triangle is parallel to the z-axis
+        # projecting it onto z=0 is zero, therefore integrating anything over it will give zero
         if n0[2] == 0.:
-            return np.tile(0., (X.shape[-1], 1)).T
+            return np.tile(0., (X.shape[-1], 1)).T # note that X.shape is probaly 1. This is not some higher dimensional array, but just a number with a few brackets around it such that quadpy is happy
+        # only if the triangle has some component in the x-y plane can the integral give a non-zero value
         else:
+        # remember, this is the function we want to integrate; it looks like x^n y^m z^l
+        # BUT, we are projecting the triangle onto the x-y plane (this is because 2D triangles are easy to integrate and quadpy can do it)
+        # so what do we do about z?
+        # use that the plane of the triangle is defined according to np.dot(n0, (x-p0))=0 for all x=(x,y,z) in the plane
+        # we can use this relation to solve for z in terms of x and y, which is done below
             c0 = np.dot(p0, n0)/n0[2]
             c0 = np.tile(c0, (X.shape[-1], 1)).T
             cx = -n0[0]/n0[2]
             cy = -n0[1]/n0[2]
+        # this is again just x^n y^m z^l except that we have used the above expression to write z in terms of x and y
         res = np.sign(n0[2])*(X[0]**n * X[1]**m * (c0 + cx*X[0] + cy*X[1])**l)
     
         return res
@@ -98,7 +136,7 @@ class SMIMatrices:
         '''
         give a set of exponents (N,M,L) and a mesh points/faces
         integrates x**N * y**M * z**L over the interior of the mesh
-        vecotrized to do the integrals over all the triangles
+        vecotrized to do the integrals over an array triangles (i.e. the parallelization is the many triangles)
         '''
         # scheme = quadpy.t2.get_good_scheme(40)
         scheme = quadpylite.t2.get_good_scheme(40)
@@ -111,8 +149,7 @@ class SMIMatrices:
     
     def intVecInPlace(self, X, exp, t):
         '''
-        vectorized quadrature integration of a polynomial
-        over an array of triangles
+        vectorized quadrature integration of a polynomial over an array of triangles
         '''
         n, m, l = exp
         p0, p1, p2 = t
@@ -167,14 +204,19 @@ class SMIMatrices:
         return polydata
     
     def NpzToPolyData(self, npz_file, scale):
+        """
+        converts surface file saved as npz to pyvista polydata
+        """
         npz_stl  = np.load(npz_file)
         polydata = pv.PolyData(npz_stl['points'], npz_stl['faces'])
         polydata = polydata.scale(scale)
         return polydata
     
     def StlToPolyData(self, stl_file, scale):
+        """
+        loads .stl file as pyvista polydata and rescales if necessary
+        """
         # scheme   = quadpy.t2.get_good_scheme(40)
-        scheme   = quadpylite.t2.get_good_scheme(40)
         polydata = pv.PolyData(stl_file)
         polydata = polydata.scale(scale)
         return polydata
@@ -183,11 +225,15 @@ class SMIMatrices:
     
     def intPolyData(self, polydata, basis_order, save_path, parallel=True, nb_processes=1,
                     shift_com=False, chunk_size=20000, rotation_matrix=None):
+        """
+        integrate basis polynomials over surface mesh and save in file
+        """
 
         print('STL VOLUME:  ', polydata.volume)    
         print("INITIAL COM: ", polydata.center_of_mass())
         points, faces = polydata.points, polydata.faces.reshape(-1, 4)[:, 1:]
 
+        # shift the mesh such that its center of mass is at zero
         if shift_com == True:
             offset = np.tile(polydata.center_of_mass(), (points.shape[0], 1))
             points -= offset
@@ -195,6 +241,7 @@ class SMIMatrices:
         print("SHIFTED COM: ", polydata.center_of_mass())
         print('')
 
+        # rotate mesh by rotation matrix before integrating
         if rotation_matrix is not None:
             for i in range(points.shape[0]):
                 p = points[i]
@@ -202,20 +249,22 @@ class SMIMatrices:
                 points[i] = pp
     
     
+        # for memory purposes, will split the integrals over the entire surface into "chunks" of "chunk_size" faces
         current_chunk = chunk_size
         chunk_num = 0
         if parallel:
             print("Starting pool...")
             pool = mp.Pool(processes=nb_processes)
+            
         while current_chunk-chunk_size<=faces.shape[0]:
-    
             t0 = time()
             print(f"CHUNK {chunk_num} ...")
-    
+
+            # pick correct chunk of mesh points and triangles
             if current_chunk <= faces.shape[0]: mesh_chunk = chunk_size
             else: mesh_chunk = faces.shape[0]-current_chunk+chunk_size
-            MESH = np.zeros([mesh_chunk, 3, 3])
-            TRIANGLES = np.zeros([mesh_chunk, 3, 2])
+            MESH = np.zeros([mesh_chunk, 3, 3]) # every row are 3 points in 3D making up a triangle
+            TRIANGLES = np.zeros([mesh_chunk, 3, 2]) # every triangle in MESH but projected on x-y plane
             for idx, f in enumerate(faces[current_chunk-chunk_size:min(faces.shape[0], current_chunk)]):
                 t = np.array([points[f[0]], points[f[1]], points[f[2]]])
                 MESH[idx] = t
@@ -227,6 +276,7 @@ class SMIMatrices:
             print("NUM POINTS: ", points.shape[0])
             #stl.plot()
     
+            # integrate all basis functions over the current chunk
             intBasis, basisLookup = self.makeBasis(2*basis_order)
             print("NUM BASIS FUNCTIONS: ", len(intBasis))
             if parallel:
@@ -246,6 +296,7 @@ class SMIMatrices:
 
             print("CHUNK VOLUME: ", intVals[0])
     
+            # save integral values for current chunk
             print("Static Mesh: ", np.allclose(MESH, MESH0))
             tmp = save_path.split("/")
             end_tmp = tmp[-1].split(".")
@@ -262,6 +313,7 @@ class SMIMatrices:
             print('')
     
     
+        # load integrals for all chunks and add together
         tmp = save_path.split("/")
         end_tmp = tmp[-1].split(".")
         end_tmp[0] += f"_chunk0"
@@ -295,9 +347,16 @@ class SMIMatrices:
     
     
     def E_int(self, i, j, intVals, basis, blookup_calc):
+        """
+        integral values for kinetic energy matrix
+        """
         ps = basis[i] + basis[j]
         return intVals[blookup_calc[tuple(ps)]]
+    
     def G_int(self, i, j, k, l, intVals, basis, blookup_calc):
+        """
+        integral values for potential energy matrix
+        """
         M = np.array([[[2,0,0],[1,1,0],[1,0,1]],[[1,1,0],[0,2,0],[0,1,1]],[[1,0,1],[0,1,1],[0,0,2]]])
         if not basis[i][k]*basis[j][l]: return 0.
         ps = basis[i] + basis[j] - M[k,l]
@@ -419,58 +478,3 @@ class SMIMatrices:
             sum = t
     
         return sum
-
-
-# if __name__ == '__main__':
-#     root_path = sys.path[0]
-#     from rus_comsol.rus_xyz import RUSXYZ
-
-
-#     basis_order  = 18
-#     nb_processes = 6
-
-#     # surface_path      = f"{root_path}/SrTiO3_2104B_comsol_super_fine_mesh.stl"
-#     surface_path      = f"{root_path}/SrTiO3_2104B_comsol_mesh_3.stl"
-#     surface_file_type = 'stl'
-#     scale             = 'mm'
-    
-#     integral_path = f"{root_path}/integrals/integrals_basis_{basis_order}.npy"
-#     E_path        = f"{root_path}\\integrals\\Etens_basis{basis_order}.npy"
-#     I_path        = f"{root_path}\\integrals\\Itens_basis{basis_order}.npy"
-
-
-#     mats = StokesMatrices(basis_order, surface_file_type, surface_path, integral_path,
-#                         E_path, I_path, scale='mm', parallel=True, nb_processes=nb_processes,
-#                         shift_com=True, find_good_rotation=True)
-
-#     mats.create_G_E_matrices()
-
-
-#     # elastic constants init in GPa
-#     elastic_dict = {
-#         'c11': 315.328,
-#         'c12': 102.192,
-#         'c44': 122.201
-#         }
-    
-#     density    = 5110
-
-#     rot_path = f"{root_path}/integrals/rotation_matrix.npy"
-#     rot_mat  = np.load(rot_path)
-#     rot      = Rotation.from_matrix(rot_mat)
-#     Euler    = rot.as_euler('xyz', degrees=True)
-#     print(Euler)
-
-#     print('create rus object')
-#     print('and calculate matrices')
-#     rus_object = RUSXYZ(cij_dict=elastic_dict, symmetry='cubic', order=basis_order,
-#                     Emat_path=E_path, Itens_path=I_path,
-#                     nb_freq=105, density=density,
-#                     angle_x=Euler[0], angle_y=Euler[1], angle_z=Euler[2],
-#                     init=True, use_quadrants=False)
-#     res = rus_object.compute_resonances()
-
-#     res0 = np.loadtxt(f"{root_path}/fit_report_SrTiO3_2104B_RT_xyz_fit_stokes_basis_16_90_resonances.txt")
-#     res0 = (res0.T)[2]
-
-#     print((res-res0)/res0)

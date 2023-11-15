@@ -13,6 +13,14 @@ import os
 class RPRMatrices:
     def __init__(self, order, dimensions,
                  Emat_path, Itens_path):
+        """
+        RPRMatrices calculates the kinetic (Emat) and potential (Itens) energy matrices for a rectangular parallelepiped;
+        follows this paper: https://doi.org/10.1121/1.401643
+        - order (int): the highest order of the cartesian polynomials used in the expansion of the displacement (used to calculate Emat and Itens)
+        - dimensions (list): list of dimensions; if first item is length along x, second along y, third along z, then angles in Elastic Constants class are all zero
+        - Emat_path (str): directory of where you want to save the calculated kinetic energy matrix
+        - Itens_path (str): directory of where you want to save the calculated potential energy matrix
+        """
 
         self.order              = order
         self.dimensions         = np.array(dimensions)
@@ -70,37 +78,42 @@ class RPRMatrices:
         return 8*self.basis[i][k]*self.basis[j][l]*np.prod((self.dimensions/2)**ps / ps)
 
 
-    def E_mat(self):
-        """
-        put the integrals from E_int in a matrix
-        Emat is the kinetic energy matrix from Arkady's paper
-        """
-        Etens = np.zeros((3,self.idx,3,self.idx), dtype= np.double)
-        for x in range(3*self.idx):
-            i, k = int(x/self.idx), x%self.idx
-            for y in range(x, 3*self.idx):
-                j, l = int(y/self.idx), y%self.idx
-                if i==j: Etens[i,k,j,l]=Etens[j,l,i,k]=self.E_int(k,l)
-        Emat = Etens.reshape(3*self.idx,3*self.idx)
-        return Emat
+    # def E_mat(self):
+    #     """
+    #     put the integrals from E_int in a matrix
+    #     Emat is the kinetic energy matrix
+    #     """
+    #     idx = int((self.order+1)*(self.order+2)*(self.order+3)/6)
+    #     Etens = np.zeros((3,idx,3,idx), dtype= np.double)
+    #     for x in range(3*idx):
+    #         i, k = int(x/idx), x%idx
+    #         for y in range(x, 3*idx):
+    #             j, l = int(y/idx), y%idx
+    #             if i==j: Etens[i,k,j,l]=Etens[j,l,i,k]=self.E_int(k,l)
+    #     Emat = Etens.reshape(3*idx,3*idx)
+    #     return Emat
 
 
-    def I_tens(self):
-        """
-        put the integrals from G_int in a tensor;
-        it is the tensor in the potential energy matrix in Arkady's paper;
-        i.e. it is the the potential energy matrix without the elastic tensor;
-        """
-        Itens = np.zeros((3,self.idx,3,self.idx), dtype= np.double)
-        for x in range(3*self.idx):
-            i, k = int(x/self.idx), x%self.idx
-            for y in range(x, 3*self.idx):
-                j, l = int(y/self.idx), y%self.idx
-                Itens[i,k,j,l]=Itens[j,l,i,k]=self.G_int(k,l,i,j)
-        return Itens
+    # def I_tens(self):
+    #     """
+    #     put the integrals from G_int in a tensor;
+    #     i.e. it is the the potential energy matrix without the elastic tensor;
+    #     """
+    #     idx = int((self.order+1)*(self.order+2)*(self.order+3)/6)
+    #     Itens = np.zeros((3,idx,3,idx), dtype= np.double)
+    #     for x in range(3*idx):
+    #         i, k = int(x/idx), x%idx
+    #         for y in range(x, 3*idx):
+    #             j, l = int(y/idx), y%idx
+    #             Itens[i,k,j,l]=Itens[j,l,i,k]=self.G_int(k,l,i,j)
+    #     return Itens
 
 
     def create_G_E_matrices (self):
+        """
+        create kinetic and potential energy matrices;
+        i.e. organize integrals from E_int and G_int in the correct way
+        """
         idx = int((self.order+1)*(self.order+2)*(self.order+3)/6)
         self.Etens, self.Itens = np.zeros((3,idx,3,idx), dtype= np.float64), np.zeros((3,idx,3,idx), dtype= np.float64)  
     
@@ -113,6 +126,8 @@ class RPRMatrices:
     
         self.Emat = self.Etens.reshape(3*idx,3*idx)
 
+        # test if Emat has a cholesky decomposition; if not it is singular and we won't be able to solve the necessary
+        # generalized eigenvalue equation to get resonance frequencies from elastic constants
         try:
             np.linalg.cholesky(self.Emat)
             print("good cholesky")
