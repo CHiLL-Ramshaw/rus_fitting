@@ -365,7 +365,14 @@ class SMIMatrices:
     
     def get_moment_of_inertia_rotation_matrix(self, polydata, save_path, parallel=True, nb_processes=1,
                                             shift_com=False, chunk_size=20000):
+        """
+        calculate the moment of inertia matrix (a 3x3 matrix) of the mesh given by polydata;
+        then find rotation matrix which diagonalizes moment of inertia matrix;
+        if we rotate the mesh by the same rotation matrix, we increase the chances of non-singular kinetic energy matrix;
+        remember to rotate the elastic constants by the same amount when calculating resonance frequencies
+        """
 
+        # create matrix of integrals of basis polynomials up to order 2 (which is what moment of inertia tensor is)
         N = 2
         self.intPolyData(polydata=polydata, basis_order=N, save_path=save_path, 
                     parallel=parallel, nb_processes=nb_processes,
@@ -374,10 +381,12 @@ class SMIMatrices:
         intVals = np.load(save_path)
         bbasis, blookup = self.makeBasis(2*N)
 
+        # create moment of inertia matrix
         Ixx, Iyy, Izz = intVals[blookup[(2,0,0)]], intVals[blookup[(0,2,0)]], intVals[blookup[(0,0,2)]]
         Ixy, Ixz, Iyz = intVals[blookup[(1,1,0)]], intVals[blookup[(1,0,1)]], intVals[blookup[(0,1,1)]]
         IM = np.array([[Ixx, Ixy, Ixz],[Ixy, Iyy, Iyz],[Ixz, Iyz, Izz]])
 
+        # find rotation matrix which diagonalizes moment of inertia matrox
         rotation_matrix = LA.eigh(IM)[1]
         if LA.det(rotation_matrix)<0:
             print('')
@@ -388,12 +397,13 @@ class SMIMatrices:
             
         rotation_matrix = rotation_matrix.T
 
+        # save rotation matrix
         tmp = save_path.split("/")
         tmp[-1] = 'rotation_matrix.npy'
         path = "/".join(tmp)
         np.save(path, rotation_matrix)
 
-        ''' this the following analysis is just to get some nice print of what the angles are '''
+        # this the following analysis is just to get some nice print of what the angles are
         rotation = Rotation.from_matrix(rotation_matrix)
         Euler_angles = rotation.as_euler('xyz', degrees=True)
         print('we rotate the surface file:')
@@ -405,6 +415,10 @@ class SMIMatrices:
     
     
     def create_G_E_matrices(self):
+        """
+        create potential and kinetic energy matrices
+        """
+        # get polydata from surface files
         if self.surface_file_type in ['stl', 'STL', 'Stl']:
             polydata = self.StlToPolyData(self.surface_path, self.scale)
         elif self.surface_file_type in ['Comsol', 'comsol', 'COMSOL']:
@@ -421,6 +435,7 @@ class SMIMatrices:
             print('the specified surface_file_type is not valid!')
             print('it must be "stl" or "comsol"')
 
+        # find rotation matrix which diagonalizes moment of inertia tensor
         if self.find_good_rotation==True:
             tmp = self.integral_path.split("/")
             # end_tmp = tmp[-1].split(".")
@@ -432,20 +447,20 @@ class SMIMatrices:
                                                                             parallel=self.parallel, nb_processes=self.nb_processes)
            
     
+        # create integrals of basis polynomials over mesh
         self.intPolyData(polydata, self.basis_order, self.integral_path,
                         parallel=self.parallel, nb_processes=self.nb_processes,
                         shift_com=self.shift_com, rotation_matrix=self.rotation_matrix)
-    
+
+        # create kinetic E and potential I energy matrices
         basis, bLookup = self.makeBasis(self.basis_order)
         print(len(basis))
         idx = int((self.basis_order+1)*(self.basis_order+2)*(self.basis_order+3)/6)
         E, I = np.zeros((3,idx,3,idx), dtype= np.float64), np.zeros((3,idx,3,idx), dtype= np.float64)
-        # M = np.array([[[2,0,0],[1,1,0],[1,0,1]],[[1,1,0],[0,2,0],[0,1,1]],[[1,0,1],[0,1,1],[0,0,2]]])
     
         b_calc, blookup_calc = self.makeBasis(2*self.basis_order)
         intVals = np.load(self.integral_path)
-        
-    
+            
         for x in range(3*idx):
             i, k = int(x/idx), x%idx
             for y in range(x, 3*idx):
@@ -454,6 +469,8 @@ class SMIMatrices:
                 I[i,k,j,l]=I[j,l,i,k]=self.G_int(k,l,i,j, intVals, basis, blookup_calc)
     
         E = E.reshape(3*idx,3*idx)
+
+        # check if kinetic energy has cholesky decomposition
         try:
             np.linalg.cholesky(E)
             print("good cholesky!")
