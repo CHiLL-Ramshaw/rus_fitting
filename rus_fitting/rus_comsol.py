@@ -15,8 +15,17 @@ class RUSComsol(ElasticConstants):
                  study_tag="std1",
                  init=False):
         """
-        density (float): expressed in kg/m^3
-        mesh (int): goes from 1 for Extremely fine to 9 for Extremely coarse
+        calculate mechanical resonances from a Comsol file
+        - cij_dict (dict): dictionary of elastic constants in GPa
+        - symmetry (str): symmetry of the crystal structure
+        - density (float): density in kg/m^3
+        - mph_file (str): directory of the comsol file used to calculate resonance frequencies
+        - nb_freq (int): number resonances to calculate
+        - mesh (int): goes from 1 for Extremely fine to 9 for Extremely coarse
+        - angle_i (float): rotation around i axis in degrees
+        - study_name (str): name of the study used in the comsol file
+        - study_tag (str): tag of the study used in the comsol file
+        - init (bool): if True, comsol is started immediately, otherwise need to call self.start_comsol() before calculating resonances
         """
         super().__init__(cij_dict,
                          symmetry=symmetry,
@@ -50,6 +59,8 @@ class RUSComsol(ElasticConstants):
 
 
     def compute_resonances(self):
+        """
+        calculate mechanical resonance frequencies in MHz"""
         ## Set number of frequencies --------------------------------------------
         self.model.parameter('nb_freq', str(self.nb_freq + 6))
         ## Set parameters  ------------------------------------------------------
@@ -64,7 +75,9 @@ class RUSComsol(ElasticConstants):
 
 
     def start_comsol(self):
-        """Initialize the COMSOL file"""
+        """
+        Initialize the COMSOL file
+        """
         self.client = mph.Client()
         self.model = self.client.load(self.mph_file)
         ## Forces to get all the resonances from 0 MHz
@@ -194,6 +207,9 @@ class RUSComsol(ElasticConstants):
 
 
     def print_logarithmic_derivative (self, comsol_start=False, print_frequencies=True):
+        """
+        generate pretty output for logarithmic derivatives
+        """
         if comsol_start == False:
             log_der, freqs_calc = self.log_derivatives_numerical(return_freqs=True)
         else:
