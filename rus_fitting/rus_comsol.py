@@ -15,8 +15,8 @@ class RUSComsol(ElasticConstants):
                  study_tag="std1",
                  init=False):
         """
-        density: expressed in kg/m^3
-        mesh: goes from 1 for Extremely fine to 9 for Extremely coarse
+        density (float): expressed in kg/m^3
+        mesh (int): goes from 1 for Extremely fine to 9 for Extremely coarse
         """
         super().__init__(cij_dict,
                          symmetry=symmetry,

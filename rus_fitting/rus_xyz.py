@@ -18,13 +18,17 @@ class RUSXYZ(ElasticConstants):
                  angle_x=0, angle_y=0, angle_z=0,
                  init=False, use_quadrants=False):
         """
-        cij_dict: a dictionary of elastic constants in GPa
-        mass: a number in kg
-        dimensions: numpy array of x, y, z lengths in m
-        order: integer - highest order polynomial used to express basis functions
-        nb_freq: number of frequencies to display
-        method: fitting method
-        use_quadrants: if True, uses symmetry arguments of the elastic tensor to simplify and speed up eigenvalue solver;
+        Calculate resonance frequencies from either RPR or SMI matrices and elastic moduli
+        - cij_dict (dict): a dictionary of elastic constants in GPa
+        - symmetry (str): crystal symmetry
+        - desnsity (float): density in kg/m^3
+        - order (int): highest order polynomial used to express basis functions
+        - Emat_path (str): directory of kinetic energy matrix to load
+        - Itens_path (str): directory of potential energy matrix to load
+        - nb_freq (int): number of frequencies to display
+        - angle_i (float): rotation around i axis in degrees
+        - init (bool): if True, lookup table is created, Emat and Itens are loaded from files; if False self.initialize() needs to be called before resonance frequencies can be calculated
+        - use_quadrants (bool): if True, uses symmetry arguments of the elastic tensor to simplify and speed up eigenvalue solver;
                         only gives correct result if crystal symmetry is orthorhombic or higher;
                         if symmetry is e.g. rhombohedral, use use_quadrants=False
                         (use_quadrants=True ignores all terms c14, c15, c16, c24, c25, ... in the elastic tensor)
@@ -96,10 +100,12 @@ class RUSXYZ(ElasticConstants):
                             self.block[lookUp[tuple((-1,-1,-1)**(self.basis[self.idx] + np.roll([1,0,0], ii)))]].append(ii*self.N + self.idx)
                         self.idx += 1
 
+        # load kinetic and potential energy matrices
         self.Emat  = np.load(self.Emat_path)
         self.Emat = self.Emat*self.density
         self.Itens = np.load(self.Itens_path)
 
+        # check if basis order given here is the same as for the energy matrices
         idx = int((self.order+1)*(self.order+2)*(self.order+3)/6)
         if abs(len(self.Emat)-3*idx) > 0.01:
             print ('the order in the "RUSXYZ" class and the imported matrices need to be the same')
@@ -120,7 +126,7 @@ class RUSXYZ(ElasticConstants):
 
     def G_mat(self):
         """
-        get potential energy matrix;
+        get potential energy matrix from potential energy integrals and elastic constants;
         this is a separate step because I_tens is independent of elastic constants, but only dependent on geometry;
         it is also the slow part of the calculation but only has to be done once this way
         """
@@ -132,8 +138,6 @@ class RUSXYZ(ElasticConstants):
     def compute_resonances(self, eigvals_only=True):
         """
         calculates resonance frequencies in MHz;
-        pars: dictionary of elastic constants
-        nb_freq: number of elastic constants to be displayed
         eigvals_only (True/False): gets only eigenvalues (i.e. resonance frequencies) or also gives eigenvectors (the latter is important when we want to calculate derivatives)
         """
         Gmat = self.G_mat()
@@ -163,10 +167,8 @@ class RUSXYZ(ElasticConstants):
 
     def log_derivatives_analytical(self, return_freqs=False):
         """
-        calculating logarithmic derivatives of the resonance frequencies with respect to elastic constants,
-        i.e. (df/dc)*(c/f), following Arkady's paper
+        calculating logarithmic derivatives of the resonance frequencies with respect to elastic constants
         """
-
         f, a = self.compute_resonances(eigvals_only=False)
         derivative_matrix = np.zeros((self.nb_freq, len(self.cij_dict)))
         ii = 0
@@ -197,6 +199,9 @@ class RUSXYZ(ElasticConstants):
 
 
     def print_logarithmic_derivative(self, print_frequencies=True):
+        """
+        print pretty text derivatives
+        """
         print ('start taking derivatives ...')
         if self.Emat is None:
             self.initialize()
@@ -344,74 +349,3 @@ class RUSXYZ(ElasticConstants):
             return (log_derivative_matrix, freq_result)
         else:
             return (log_derivative_matrix)#, fit_results_dict)
-
-
-if __name__ == "__main__":
-
-    # elastic_dict = {
-    #                 'c11': 82.299,
-    #                 'c12': 24.767,
-    #                 'c13': 12.806,
-    #                 'c22': 122.585,
-    #                 'c23': 41.304,
-    #                 'c33': 78.880,
-    #                 'c44': 44.075,
-    #                 'c55': 31.502,
-    #                 'c66': 26.291
-    #                 }
-
-    # N          = 10
-    # Emat_path  = f'UTe2_stokes_mesh3_Etens_basis_{N}.npy'
-    # Itens_path = f'UTe2_stokes_mesh3_Itens_basis_{N}.npy'
-
-    # rusxyz = RUSXYZ(cij_dict=elastic_dict, symmetry='orthorhombic', order=N,
-    #                 load_matrices=True, xyz_object = None,
-    #                 Emat_path=Emat_path, Itens_path=Itens_path,
-    #                 nb_freq=40,
-    #                 angle_x=0, angle_y=0, angle_z=0,
-    #                 init=False, use_quadrants=True)
-    # rusxyz.initialize()
-    # print(rusxyz.compute_resonances())
-
-    # elastic_dict = {
-    #                 'c11': 141.362,
-    #                 'c12': 57.929,
-    #                 'c13': 11.218,
-    #                 'c33': 190.680,
-    #                 'c44': 49.005
-    #                 }
-
-    # N          = 16
-    # Emat_path  = f'Mn3Ge_2105A_stokes_mesh3_Etens_basis_{N}.npy'
-    # Itens_path = f'Mn3Ge_2105A_stokes_mesh3_Itens_basis_{N}.npy'
-
-    # rusxyz = RUSXYZ(cij_dict=elastic_dict, symmetry='hexagonal', order=N,
-    #                 load_matrices=True, xyz_object=None,
-    #                 Emat_path=Emat_path, Itens_path=Itens_path,
-    #                 nb_freq=50,
-    #                 angle_x=0, angle_y=0, angle_z=0,
-    #                 init=False, use_quadrants=True)
-    # rusxyz.initialize()
-    # print(rusxyz.compute_resonances())
-
-
-    elastic_dict = {
-                    'c11': 133.523,
-                    'c12': 47.905,
-                    'c13': 8.318,
-                    'c33': 207.140,
-                    'c44': 48.152
-                    }
-
-    N          = 16
-    Emat_path  = f'Mn3Ge_2104C_stokes_mesh3_Etens_basis_{N}.npy'
-    Itens_path = f'Mn3Ge_2104C_stokes_mesh3_Itens_basis_{N}.npy'
-
-    rusxyz = RUSXYZ(cij_dict=elastic_dict, symmetry='hexagonal', order=N,
-                    load_matrices=True, matrix_object=None,
-                    Emat_path=Emat_path, Itens_path=Itens_path,
-                    nb_freq=55,
-                    angle_x=0, angle_y=0, angle_z=0,
-                    init=False, use_quadrants=False)
-    rusxyz.initialize()
-    print(rusxyz.compute_resonances())
