@@ -16,7 +16,20 @@ class RUSSCIPYLEASTSQ:
                  freqs_file, nb_freqs, nb_max_missing=0, report_name="",
                  tolerance=0.01, xtol=1e-5, epsfcn=None, use_Jacobian=False):
         """
-        freqs_files should contain experimental resonance frequencies in MHz and a weight
+        fit elastic constants to experimental resonance frequencies using scipy.optimize.leastsq
+        - rus_object: how are you doing the forward calculation? can be rus_xyz or rus_comsol
+            - needs to be initialized before implemented here
+            - if leastsq fit is used, elastic constants from rus_object are used as starting values
+        - bounds_dict (dict): dictionary of bounds of free parameters in the fit
+            - can inlude elastic constants in GPa but also angles in degrees
+            - if bounds (list) are given, parameter is varied during fit, otherwise parameter is kept constant
+        - freqs_file (str): directory of experimental resonance frequencies in MHz (in first column) and a weight (in seconed column)
+        - nb_freqs (int): how many experimental resonances are used to fit
+        - nb_max_missing=0 (int): at maximum how many potential resonances do you expect to be missing in list of experimental resonances
+            - should be zero most times, because leastsq doesn't like it if the number of variables changes mid fit
+        - report_name (str): directory of how you want to save final report of fit
+        - the rest of the parameters are parameters relevant to the scipy.leastsq fit routine
+            - see scipy.optmize.leastsq documentation for details
         """
         # get initial guess from parameters given to rus_object
         self.rus_object  = rus_object
@@ -54,17 +67,14 @@ class RUSSCIPYLEASTSQ:
         self.weight          = None
         self.load_data()
 
-
         ## fit algorith
         self.errorbars = False # True if uncertainties have been calculated, False if not
-
 
         ## scipy leastsq parameters
         self.tolerance     = tolerance
         self.epsfcn        = epsfcn
         self.use_Jacobian  = use_Jacobian
         self.xtol          = xtol
-
 
         self.report_name = report_name
 
@@ -85,6 +95,7 @@ class RUSSCIPYLEASTSQ:
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def load_data(self):
         """
+        load experimental resonance spectrum
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
@@ -120,6 +131,10 @@ class RUSSCIPYLEASTSQ:
 
 
     def sort_freqs(self, freqs_sim):
+        """
+        match experimental resonances with calculated ones;
+        find missing resonances in  experimental data set
+        """
         if self.nb_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
             cost_matrix = distance_matrix(self.freqs_data[:, None], freqs_sim[:, None])**2
@@ -232,6 +247,9 @@ class RUSSCIPYLEASTSQ:
 
 
     def run_fit (self, print_derivatives=False):
+        """
+        run a fitting algorithm with the scipy.optimize.leastsq to minimize the residual function
+        """
         if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
             print ("the rus_comsol object was not started!")
             print ("it is being initialized right now ...")
@@ -309,6 +327,10 @@ class RUSSCIPYLEASTSQ:
     # the following methods are just to display the fit report and data in a nice way
 
     def report_best_pars(self):
+        """
+        generate text output to print the result of the fit
+            - just print free and fixed fit paramters
+        """
         report = "#Variables" + '-'*(70) + '\n'
         for ii, free_name in enumerate(self.free_pars_name):
             if free_name[0] == "c": unit = "GPa"
@@ -347,6 +369,10 @@ class RUSSCIPYLEASTSQ:
 
 
     def report_fit(self):
+        """
+        generate text output to print the result of the fit
+            - just print fit parameters
+        """
         fit_output  = self.fit_output
         _, _, infodict, _, ier = fit_output
         success = ( ier in np.array([1,2,3,4], dtype=int) )
@@ -374,6 +400,10 @@ class RUSSCIPYLEASTSQ:
 
 
     def report_best_freqs(self, nb_additional_freqs=10):
+        """
+        generate text output to print the result of the fit
+            - just print calculated and experimental resonance frequencies
+        """
         if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
             if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
                 self.rus_object.start_comsol()
@@ -423,6 +453,10 @@ class RUSSCIPYLEASTSQ:
         return report
 
     def report_sample_text(self):
+        """
+        generate text output to print the result of the fit
+            - just print information about sample
+        """
         sample_template = "{0:<40}{1:<20}"
         sample_text = '# [[Sample Characteristics]] \n'
         sample_text += '# ' + sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
@@ -439,6 +473,10 @@ class RUSSCIPYLEASTSQ:
 
 
     def report_total(self, comsol_start=True):
+        """
+        generate text output to print the result of the fit
+            - print total fit report including all information
+        """
         report_fit = self.report_fit()
         report_fit += self.report_best_pars()
         if isinstance(self.rus_object, RUSXYZ):
@@ -473,6 +511,9 @@ class RUSSCIPYLEASTSQ:
 
 
     def save_report(self, report):
+        """
+        save fit report
+        """
         if self.report_name == "":
             index = self.freqs_file[::-1].find('/')
             if index == -1:
