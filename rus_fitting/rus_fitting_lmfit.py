@@ -22,7 +22,22 @@ class RUSLMFIT:
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
                  polish=True, updating='immediate', tolerance=0.01, epsfcn=None, use_Jacobian=False):
         """
-        freqs_files should contain experimental resonance frequencies in MHz and a weight
+        fit elastic constants to experimental resonance frequencies using lmfit fitting environment
+        - rus_object: how are you doing the forward calculation? can be rus_xyz or rus_comsol
+            - needs to be initialized before implemented here
+            - if leastsq fit is used, elastic constants from rus_object are used as starting values
+        - bounds_dict (dict): dictionary of bounds of free parameters in the fit
+            - can inlude elastic constants in GPa but also angles in degrees
+            - if bounds (list) are given, parameter is varied during fit, otherwise parameter is kept constant
+        - freqs_file (str): directory of experimental resonance frequencies in MHz (in first column) and a weight (in seconed column)
+        - nb_freqs (int): how many experimental resonances are used to fit
+        - nb_max_missing=0 (int): at maximum how many potential resonances do you expect to be missing in list of experimental resonances
+        - report_name (str): directory of how you want to save final report of fit
+        - method (str): options of different fit routines: 'differential_evolution', 'leastsq', 'least_squares';
+            - for 'leastsq' and 'lest_squares' nb_max_missing should be zero; finding missing res only works for differential_evolution
+            - see lmfit documentation for details
+        - the rest of the parameters are parameters relevant to different possible fit routines
+            - see lmfit documentation for details
         """
         # get initial guess from parameters given to rus_object
         self.rus_object  = rus_object
@@ -62,7 +77,12 @@ class RUSLMFIT:
 
 
         ## fit algorithm
-        self.method    = method # "shgo", "differential_evolution", "leastsq"
+        self.method    = method # "differential_evolution", "leastsq", "least_squares"
+        if (self.method=='leastsq') or (self.method=='least_squares'):
+            if self.nb_missing != 0:
+                print()
+                print("lestsq and least_squares fitting methods should only be run with nb_max_missing=0")
+                sys.exit()
         self.errorbars = False # True if uncertainties have been calculated, False if not
 
         ## set up fit parameters for lmfit
@@ -103,6 +123,7 @@ class RUSLMFIT:
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def load_data(self):
         """
+        load experimental resonance spectrum
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
@@ -138,6 +159,10 @@ class RUSLMFIT:
 
 
     def sort_freqs(self, freqs_sim):
+        """
+        match experimental resonances with calculated ones;
+        find missing resonances in  experimental data set
+        """
         if self.nb_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
             cost_matrix = distance_matrix(self.freqs_data[:, None], freqs_sim[:, None])**2
@@ -242,15 +267,14 @@ class RUSLMFIT:
         # the derivative of that is therefore (f_data/f^2) * df/dc
         d_residual_function = f_data_matrix / f_calc_matrix**2 * dfdc
 
-
         print ('calculated jacobian!')
-
         return d_residual_function
 
 
-
-
     def run_fit (self, print_derivatives=False):
+        """
+        run a fitting algorithm with the lmfit environment to minimize the residual function
+        """
         if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
             print ("the rus_comsol object was not started!")
             print ("it is being initialized right now ...")
@@ -350,6 +374,10 @@ class RUSLMFIT:
     # the following methods are just to display the fit report and data in a nice way
 
     def report_best_pars(self):
+        """
+        generate text output to print the result of the fit
+            - just print free and fixed fit paramters
+        """
         report = "#Variables" + '-'*(70) + '\n'
         for free_name in self.free_pars_name:
             if free_name[0] == "c": unit = "GPa"
@@ -383,6 +411,10 @@ class RUSLMFIT:
 
 
     def report_fit(self):
+        """
+        generate text output to print the result of the fit
+            - just print fit parameters
+        """
         fit_output  = self.fit_output
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
@@ -405,6 +437,10 @@ class RUSLMFIT:
 
 
     def report_best_freqs(self, nb_additional_freqs=10):
+        """
+        generate text output to print the result of the fit
+            - just print calculated and experimental resonance frequencies
+        """
         if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
             if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
                 self.rus_object.start_comsol()
@@ -454,6 +490,10 @@ class RUSLMFIT:
         return report
 
     def report_sample_text(self):
+        """
+        generate text output to print the result of the fit
+            - just print information about sample
+        """
         sample_template = "{0:<40}{1:<20}"
         sample_text = '# [[Sample Characteristics]] \n'
         sample_text += '# ' + sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
@@ -470,6 +510,10 @@ class RUSLMFIT:
 
 
     def report_total(self, comsol_start=True):
+        """
+        generate text output to print the result of the fit
+            - print total fit report including all information
+        """
         report_fit = self.report_fit()
         report_fit += self.report_best_pars()
         if isinstance(self.rus_object, RUSXYZ):
@@ -504,6 +548,9 @@ class RUSLMFIT:
 
 
     def save_report(self, report):
+        """
+        save fit report
+        """
         if self.report_name == "":
             index = self.freqs_file[::-1].find('/')
             if index == -1:
