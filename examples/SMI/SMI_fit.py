@@ -1,6 +1,6 @@
 from numpy.lib.function_base import angle
 from time import time
-from rus_fitting.rus_fitting_ray import RUSFitting
+from rus_fitting.rus_fitting_ray import RUSRAY
 from rus_fitting.rus_xyz import RUSXYZ
 from rus_fitting.smi_matrices import SMIMatrices
 from scipy.spatial.transform import Rotation as R
@@ -56,7 +56,7 @@ if __name__ == '__main__':
                     init=True, use_quadrants=True)
 
     print('start fitting')
-    fit = RUSFitting(rus_object, bounds_dict,
+    fit = RUSRAY(rus_object, bounds_dict,
                     freqs_file=freqs_file, nb_freqs=nb_freq,
                     nb_max_missing=nb_missing, nb_workers=nb_workers, polish=True,
                     population=15, N_generation=1000, mutation=0.7, crossing=0.9,

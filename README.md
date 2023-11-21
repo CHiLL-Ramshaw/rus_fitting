@@ -45,3 +45,10 @@ Uses the lmfit package (https://lmfit.github.io/lmfit-py/). Implemented are the 
 ## rus_fitting_scipy_leastsq.py
 Uses scipy.optimize.leastsq (https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.leastsq.html) to perform only gradient descent fits.
     - number of missing resonances should be zero; gradient descend is not well suited to take of that
+
+
+# Examples
+Examples in the example folder contain the following
+- fitting elastic constants of a cubic material with comsol and rus_fitting_scipy_leastsq
+- fitting elastic constants of a cubic material with the RPR method and rus_fitting_lmfit
+- fitting elastic constants of a cubic material with the SMI method and rus_fitting_ray
