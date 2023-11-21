@@ -25,7 +25,21 @@ class RUSRAY:
                  population=15, N_generation=10000, mutation=0.7, crossing=0.9,
                  polish=False, updating='deferred', tolerance=0.01):
         """
-        freqs_files should contain experimental resonance frequencies in MHz and a weight
+        fit elastic constants to experimental resonance frequencies using scipy.optimize.differential_evolution parallelized with ray (https://www.ray.io/ray-core)
+        - rus_object: how are you doing the forward calculation? can be rus_xyz or rus_comsol
+            - needs to be initialized before implemented here
+            - if leastsq fit is used, elastic constants from rus_object are used as starting values
+        - bounds_dict (dict): dictionary of bounds of free parameters in the fit
+            - can inlude elastic constants in GPa but also angles in degrees
+            - if bounds (list) are given, parameter is varied during fit, otherwise parameter is kept constant
+        - freqs_file (str): directory of experimental resonance frequencies in MHz (in first column) and a weight (in seconed column)
+        - nb_freqs (int): how many experimental resonances are used to fit
+        - nb_max_missing=0 (int): at maximum how many potential resonances do you expect to be missing in list of experimental resonances
+        - nb_workers (int): number of processes for parallelization
+        - report_name (str): directory of how you want to save final report of fit
+        - the rest of the parameters are parameters relevant to scipy.optimize.differential_evolution
+            - see scipy documentation for details
+            - updating='deferred' by default because anything else would render the parallelization useless
         """
         self.rus_object  = rus_object
         self.init_pars   = deepcopy(self.rus_object.cij_dict)
@@ -108,6 +122,7 @@ class RUSRAY:
     ## Methods >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     def load_data(self):
         """
+        load experimental resonance spectrum
         Frequencies should be in MHz
         """
         ## Load the resonance data in MHz
@@ -143,6 +158,10 @@ class RUSRAY:
 
 
     def sort_freqs(self, freqs_sim):
+        """
+        match experimental resonances with calculated ones;
+        find missing resonances in  experimental data set
+        """
         if self.nb_max_missing != 0:
             ## Linear assignement of the simulated frequencies to the data
             cost_matrix = distance_matrix(self.freqs_data[:, None], freqs_sim[:, None])**2
@@ -167,6 +186,9 @@ class RUSRAY:
 
 
     def compute_chi2(self, freqs_sim_list):
+        """
+        get list of chi2 from list of calculated resonance spectra;
+        i.e. freqs_sim_list is list of lists - resonance spectra from different elastic constants"""
         ## Remove the useless small frequencies
         chi2 = np.empty(len(freqs_sim_list), dtype=np.float64)
         rms  = np.empty(len(freqs_sim_list), dtype=np.float64)
@@ -200,6 +222,11 @@ class RUSRAY:
 
 
     def generate_workers(self):
+        """
+        generate ray workers;
+        - for rus_xyz, rus object can be created and initialized and then sent to different workers
+        - for rus_comsol, rus object needs to be created, then sent to different workers, and then initialized
+        """
         if isinstance(self.rus_object, RUSXYZ):
             self.rus_object.initialize()
         for _ in range(self._nb_workers):
@@ -234,6 +261,9 @@ class RUSRAY:
 
 
     def update_worker(self, worker, value):
+        """
+        update cij and angles on worker
+        """
         ## Update cij with fit parameters
         for i, free_name in enumerate(self.free_pars_name):
             if free_name not in ["angle_x", "angle_y", "angle_z"]:
@@ -249,6 +279,9 @@ class RUSRAY:
         return worker.compute_resonances.remote()
 
     def update_rus_object(self, value):
+        """
+        update cij and angles on rus_object
+        """
         ## Update cij with fit parameters
         for i, free_name in enumerate(self.free_pars_name):
             if free_name not in ["angle_x", "angle_y", "angle_z"]:
@@ -265,6 +298,9 @@ class RUSRAY:
 
 
     def close_workers(self):
+        """
+        stop comsol if ray workers are rus_comsol objects
+        """
         if isinstance(self.rus_object, RUSComsol):
             for worker in self.workers:
                 worker.stop_comsol.remote()
@@ -272,10 +308,11 @@ class RUSRAY:
 
     def map(self, func, iterable):
         """
-        It is because Pool.map from multiprocessing has the shape
-        map(fun, iterable) that the arguments of this function are the same
-        but func is not being used
+        get chi2 for an entire generation of the differential evolution
         """
+        # It is because Pool.map from multiprocessing has the shape
+        # map(fun, iterable) that the arguments of this function are the same
+        # but func is not being used
         self.last_gen = deepcopy(iterable)
         start_total_time = time.time()
         freqs_sim_list = self.pool.map(self.update_worker, iterable)
@@ -310,6 +347,9 @@ class RUSRAY:
 
 
     def polish_func(self, single_value):
+        """
+        function to minimize with differential evolution
+        """
         if type(single_value[0])==list:
             freqs_sim_list = self.pool.map(self.update_worker, single_value)
         else:
@@ -320,6 +360,9 @@ class RUSRAY:
 
 
     def ray_init(self, num_cpus=None):
+        """
+        initialize ray with num_cpus workers
+        """
         if num_cpus==None:
             num_cpus = cpu_count(logical=False)
         ray.init(num_cpus=num_cpus,
@@ -328,6 +371,9 @@ class RUSRAY:
 
 
     def run_fit(self, print_derivatives=False):
+        """
+        run a fitting algorithm with the scipy differential evolution and ray parallelization
+        """
         ## Start Ray
         if self.ray_init_auto == True:
             self.ray_init()
@@ -381,6 +427,10 @@ class RUSRAY:
 
 
     def report_best_pars(self):
+        """
+        generate text output to print the result of the fit
+            - just print free and fixed fit paramters
+        """
         report = "#Variables" + '-'*(70) + '\n'
         for free_name in self.free_pars_name:
             if free_name[0] == "c": unit = "GPa"
@@ -406,6 +456,10 @@ class RUSRAY:
 
 
     def report_fit(self):
+        """
+        generate text output to print the result of the fit
+            - just print fit parameters
+        """
         fit_output  = self.fit_output
         duration    = np.round(self.fit_duration, 2)
         N_points    = self.nb_freqs
@@ -428,6 +482,10 @@ class RUSRAY:
 
 
     def report_best_freqs(self, nb_additional_freqs=10):
+        """
+        generate text output to print the result of the fit
+            - just print calculated and experimental resonance frequencies
+        """
         if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
             if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
                 self.rus_object.start_comsol()
@@ -477,6 +535,10 @@ class RUSRAY:
         return report
 
     def report_sample_text(self):
+        """
+        generate text output to print the result of the fit
+            - just print information about sample
+        """
         sample_template = "{0:<40}{1:<20}"
         sample_text = '# [[Sample Characteristics]] \n'
         sample_text += '# ' + sample_template.format(*['crystal symmetry:', self.rus_object.symmetry]) + '\n'
@@ -493,6 +555,10 @@ class RUSRAY:
 
 
     def report_total(self, comsol_start=True):
+        """
+        generate text output to print the result of the fit
+            - print total fit report including all information
+        """
         report_fit = self.report_fit()
         report_fit += self.report_best_pars()
         if isinstance(self.rus_object, RUSXYZ):
@@ -527,6 +593,9 @@ class RUSRAY:
 
 
     def save_report(self, report):
+        """
+        save fit report
+        """
         if self.report_name == "":
            self.report_name = "fit_report.txt"
 
