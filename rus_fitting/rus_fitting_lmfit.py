@@ -441,7 +441,7 @@ class RUSLMFIT:
         generate text output to print the result of the fit
             - just print calculated and experimental resonance frequencies
         """
-        if (nb_additional_freqs != 0) or (self.best_freqs_found == []):
+        if (nb_additional_freqs != 0) or (self.best_freqs_found[0] < 1):
             if isinstance(self.rus_object, RUSComsol) and (self.rus_object.client is None):
                 self.rus_object.start_comsol()
             if isinstance(self.rus_object, RUSXYZ) and (self.rus_object.Emat is None):
